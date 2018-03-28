@@ -1,0 +1,12 @@
+thesis.pdf
+*.aux
+*.bbl
+*.bcf
+*.run.xml
+*.dvi
+*.log
+*.blg
+*.lof
+*.lot
+*.toc
+*.swp
