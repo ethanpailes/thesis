@@ -1,0 +1,459 @@
+\chapter{An Implementation}
+\label{chapter:implementation}
+
+This chapter details our implementation of a regular expression
+engine which leverages skip regex. We implemented skip regex as
+an extension to rust's Regex crate. The decision to extend rather
+than start a fresh project allowed us to reuse the parser,
+testing tools, and even a few implementation techniques. Extending
+an existing library made it even easier to provide backwards
+compatibility with an existing ecosystem. Our implementation
+can be found at \verb'https://github.com/ethanpailes/regex/tree/skip-regex'.
+% TODO: pin to a specific commit or release tag before publication.
+
+%% Talk about use cases??
+
+\section{Architecture}
+
+Executing a skip regular expression requires a number of phases
+arranged in a pipeline. Before any work can be done on the regex,
+it must be parsed. Fortunately, the backwards compatible concrete
+syntax of skip regex means that we could just use the parser provided
+by rust's regex crate. The real work of executing skip regex does not
+pick up until it is time to compile the regular expression.
+
+Skip regex are compiled by applying the \verb'code' function defined
+in the Compilation section. In practice, we make a few adjustments to
+the compilation technique for performance. The biggest such change
+is to the format of the VM instructions that we execute. Rather than
+using explicit labels, each instruction is annotated with one or
+two \verb'goto' pointers indicating the next instruction to jump to.
+This enables the complete removal of the \verb'jmp' instruction, which
+cuts down on both code size and the number of cycles required to execute
+a particular regex. This new format requires continually back-patching
+the last instruction or instructions that were compiled, which is a bit
+less clear than the direct style used to define the \verb'code' function.
+% TODO: reference Compilation section properly when I stitch these
+%       things together
+
+Once a regular expression is compiled, it can be executed by one
+of many potential engines, each with its own set of trade offs.
+The main engine we use is a bounded backtracking engine. The
+implementation is covered in greater detail below, but the core
+idea of a bounded backtracker is to extend a standard backtracker
+with a bitset indicating which states the engine has already
+been in. So long as history does not matter (which is the case
+when back-references are not allowed), it is safe to skip any
+state which has already been visited. Doing so has the benefit
+of restoring guaranteed linear running time.
+
+The bitset that allows the bounded backtracker to provide guaranteed
+linear running time is $O(|input||regex|)$ in space, which is
+cheap when the regex and input are small but can get quite expensive
+as they grow. Rob Pike's lockstep VM does not suffer from this
+space blowup, so it makes a good fallback despite running slower
+for small cases. Unfortunately, Pike's VM cannot handle branch
+precedence correctly when extended with the ability to execute
+skip instructions. Match disambiguation is not always required,
+so this does not completely negate the usefulness of Pike's VM
+when extended with skip instructions (\cite{Pike1987}).
+
+\section{Backwards Incompatibilities or Missing Features}
+
+The Rust regex library is a mature and full featured regular expression
+engine. This provided significant opportunity to reuse well tested
+components, but it also meant that bringing a new regex engine to
+full feature parity with the existing pipeline was difficult. We
+choose to defer implementation of a few features that the regex crate
+supports in order to focus on exploring the key concepts in play.
+We discuss these features briefly here to provide a sketch of how
+they might be added to skip regex.
+
+The first feature we omit is support for case-insensitive regex.
+Many regex engines provide a flag which asks the engine to ignore
+case when performing a match. This is useful when searching for
+words embedded in natural language or keywords of a case-insensitive
+language like SQL. Implementing this feature can be performed as
+an AST rewrite pass, where each character is replaced by a character
+class which includes both the character and its capitol version.
+For example \verb'abc' would be rewritten as \verb'[aA][bB][cC]'.
+Implementing this flag as an AST transform had a bit of an
+impedance mismatch with the version of the regex crate that we
+forked, but there is no reason it should not work with skip regex.
+
+The second feature we omit is unicode support. Unicode support in
+a regex library is non-trivial, primarily due to the fact that
+unicode code-points are variable width. This makes indexing into
+a unicode string $O(n)$ in the size of the string. The scan optimizations
+on skip regex would be unaffected by this, because they have to deal
+with scanning forward over chunks of the input anyway. Even in the
+context of a unicode string, substring search algorithms can operate at
+the byte level. The implementation of the skip instruction would require
+a bit more work. The simplest thing to do would be to just construct
+a unicode DFA to decode the input, and then use it to scan quickly
+forward. This would take the runtime of the skip instruction from
+$O(1)$ to $O(n)$, but the constant factor would still be lower
+than the cost associated with an NFA simulation. We could improve on
+this situation significantly by adding a separate \verb'skip-exact'
+instruction for use in situations where the size in bytes of the
+skip can be statically determined. Thus, a literal unicode character
+which takes up three bytes would compile down to a \verb'skip-exact 3'
+instruction. Adding support for unicode to skip regex would be significantly
+more work than adding support for case folding, but would still be
+perfectly feasible.
+
+\section{Skip Bounded Backtracker}
+
+The primary backend used to execute skip regex is the skip bounded
+backtracker. Backtracking regex engines have a long history.
+Their speed, ease of implementation, and extensibility make them
+a great choice for a regex backend, but they suffer from a worst-case
+exponential running time. This exponential blow up can be fixed by
+keeping a bitset which tracks every state that the engine has
+ever been in, where a state is identified by the tuple of the
+instruction pointer and the input index. Once the engine has
+been in a particular state once, there is no need to explore it
+again.
+% TODO: cite Russ Cox?
+
+The primary cost associated with the bounded backtracker is
+the initialization of the bitset, which consumes $O(|regex||input|)$
+space. Very few executions cause the NFA simulation to enter all
+or most states, but initializing the bitset to all zeros must always
+touch every state bit. When the expression and input are small, the
+cost is negligible, but as they grow it eventually starts to dominate.
+All of the skip regex optimizations we perform have the effect of
+reducing code size, which cuts down on the size of the bitset,
+and hence the cost of its initialization.
+
+\subsection{Algorithm}
+
+The bounded backtracking algorithm can be very naturally expressed
+in terms of a recursive function parameterized by a set of captures,
+an instruction pointer, and a string offset.  The ``Backtrack'' procedure
+laid out in algorithm \ref{algo:recurboundedback} takes an array of capture
+slots, an instruction pointer and a string pointer as input and returns
+either ``NoMatch'' to indicate that no match could be found
+or ``Match($captures$)'' to indicate that there was a match with the
+given capture slots. Some pre processing is required to
+set up the bitset (here called $seen$) and the capture slots,
+and some post processing is required to convert the capture slots
+to capture groups suitable for user consumption, but the core
+of the algorithm is here. Strictly speaking, ``Backtrack'' should
+never return ``NoMatch'' because it is invalid to invoke a skip
+regex on input which will not match the regex, but the concept of
+a failed intermediary match is required to support non deterministic
+branching internally (the \verb'split' instruction). There are also
+some cases where skip regex \emph{can} detect invalid input at no
+extra cost, and there is no particular reason to avoid telling the
+user about such cases.
+
+Algorithm \ref{algo:recurboundedback} is still presented at a
+high level, and there are a number of tricks that we use in the
+real implementation which improve performance at the cost of
+readability. We use an explicit bitset rather than an abstract
+set to implement the seen-set. Rather than using explicit recursion,
+we use a heap-allocated stack of actions representing stack frames.
+We avoid copying the $captures$ array at every step by modifying
+a single captures array in place and introducing a restoration action
+which can be interleaved with the standard stack resumption action.
+Similarly, the instruction pointer and string pointer are modified
+in place. Algorithm \ref{algo:loopboundedback} implements these
+optimizations. Several of the less interesting instructions are
+omitted for brevity, but it should be easy to see how the implementation
+might be translated form algorithm \ref{algo:recurboundedback}
+
+\begin{algorithm}
+\caption{Recursive Bounded Backtracker} \label{algo:recurboundedback}
+\begin{algorithmic}
+\State Assume the existence of a $scan\_to\_start(needle, haystack)$ function
+        which performs fast substring search for the needle in the haystack
+        (using Tuned Boyer-Moore, or hardware accelerated literal search
+        as appropriate).
+\State Let $input$ be the input string.
+\State Let $insts$ be the instructions.
+\State $seen \gets \{\}$
+\Procedure{Backtrack}{$captures$, $ip$, $sp$}
+  \If{$\langle ip, sp \rangle \in seen$}
+    \State \textbf{return} NoMatch
+  \EndIf
+  \State $seen \gets seen \cup \{\langle ip, sp \rangle\}$
+  \Switch{$insts[ip]$}
+    \Case{{\tt split L1 L2}}
+      \Switch{Backtrack($captures$, {\tt L1}, $sp$)}
+        \Case{NoMatch}
+          \State \textbf{return} Backtrack($captures$, {\tt L2}, $sp$)
+        \EndCase
+        \Case{Match($captures'$)}
+          \State \textbf{return} Match($captures'$)
+        \EndCase
+      \EndSwitch
+    \EndCase
+    \Case{{\tt jmp L}}
+      \State \textbf{return} Backtrack($captures$, {\tt L}, $sp$)
+    \EndCase
+    \Case{{\tt match}}
+      \State \textbf{return} Match($captures$)
+    \EndCase
+    \Case{{\tt skip} $n$}
+      \State \textbf{return} Backtrack($captures$, $ip + 1$, $sp + n$)
+    \EndCase
+    \Case{{\tt save} $s$}
+      \State $captures[s] \gets sp$
+      \State \textbf{return} Backtrack($captures$, $ip + 1$, $sp$)
+    \EndCase
+    \Case{{\tt char} $\alpha$}
+      \If{$sp < input.len() \wedge input[sp] \in \alpha$}
+        \State \textbf{return} Backtrack($captures$, $ip + 1$, $sp + 1$)
+      \Else
+        \State \textbf{return} NoMatch
+      \EndIf
+    \EndCase
+    \Case{{\tt scan-end} $l$}
+      \If{$literal\_start \gets scan\_to\_start(l, input[sp..])$}
+        \State \textbf{return}
+            Backtrack($captures$, $ip + 1$, $literal\_start + len(l)$)
+      \Else
+        \State \textbf{return} NoMatch
+      \EndIf
+    \EndCase
+    \Case{{\tt scan-begin} $l$}
+      \If{$literal\_start \gets scan\_to\_start(l, input[sp..])$}
+        \State \textbf{return}
+                  Backtrack($captures$, $ip + 1$, $literal\_start$)
+      \Else
+        \State \textbf{return} NoMatch
+      \EndIf
+    \EndCase
+    \Case{{\tt goto-end}}
+      \State \textbf{return} Backtrack($captures$, $ip + 1$, $input.len()$)
+    \EndCase
+  \EndSwitch
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+\caption{Bounded Backtracker} \label{algo:loopboundedback}
+\begin{algorithmic}
+\State Let $input$ be the input string.
+\State Let $insts$ be the instructions.
+\Procedure{Backtrack}{$inst\_p$, $string\_p$}
+  \State $seen \gets \{\}$
+  \State $resume \gets [State(inst\_p, string\_p)]$
+  \State $captures \gets [NONE, ...]$
+  \While{$r \gets resume.pop()$}
+    \Switch{$r$}
+      \Case{$State(ip, sp)$}
+        \If{$\langle ip, sp \rangle \in seen$}
+          \State \textbf{break}
+        \EndIf
+        \State $seen \gets seen \cup \{\langle ip, sp \rangle\}$
+        \While{$sp < input.len()$}
+          \Switch{$insts[ip]$}
+            \Case{{\tt split L1 L2}}
+              \State $resume.push(State(L2, sp))$
+              \State $ip \gets L1$
+              \State \textbf{break}
+            \EndCase
+            \Case{{\tt match}}
+              \State \textbf{return} true
+            \EndCase
+            \Case{{\tt skip} $n$}
+              \State $sp \gets sp + n$
+              \State $ip \gets ip + 1$
+              \State \textbf{break}
+            \EndCase
+            \Case{{\tt save} $s$}
+              \State $resume.push(Restore(s, captures[s]))$
+              \State $captures[s] \gets sp$
+              \State $ip \gets ip + 1$
+              \State \textbf{break}
+            \EndCase
+            \Case{{\tt char} $\alpha$}
+              \If{$input[sp] \in \alpha$}
+                \State $ip \gets ip + 1$
+                \State \textbf{break}
+              \Else
+                \State \textbf{return} false
+              \EndIf
+            \EndCase
+            \Comment{Some cases omitted}
+          \EndSwitch
+        \EndWhile
+        \State \textbf{return} false
+      \EndCase
+      \Case{$Restore(slot, val)$}
+        \State $captures[slot] = val$
+        \State \textbf{break}
+      \EndCase
+    \EndSwitch
+  \EndWhile
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\section{Skip PikeVM}
+
+While it is usually not as fast as the bounded backtracker,
+a modified version of Rob Pike's lockstep VM (\cite{Pike1987})
+can also be used to execute skip regex. The skip Pike VM cannot
+implement greedy vs lazy match differentiation, so it can't be
+used in situations where this is important. Because of these
+limitations relative to the skip bounded backtracker, we will
+try to keep our discussion of the skip Pike VM brief\footnote{
+Russ Cox provides an in depth discussion of the Pike VM style
+of NFA simulation (\cite{CoxVirtualMachineApproach}).
+}.
+
+The core idea of a Pike VM is to maintain two sets of threads:
+one situated at the current character and one at the next character.
+In a standard NFA simulation, no thread will ever spawn with
+a string pointer in any location besides these two, and
+neither set of pending threads can ever grow larger than
+the number of instructions, as duplicate threads are ignored.
+Such a scheme requires a representation of a set of threads
+between $0$ and $|regex|$ in size that supports fast containment
+checking, fast iteration, and fast clearing. A sparse set using
+uninitialized memory makes all of these operations constant except
+for iteration which is linear (\cite{Briggs1993}), which makes it
+a good choice for the representation of a thread set. This
+effectively limits the number of steps which can occur
+at any character of input to be $O(|regex|)$, guaranteeing that
+the runtime does not exceed $O(|regex||input|)$. Typically the regex
+is small, so this can be thought of as linear in the size of the input.
+
+In order to support skip regex, the Pike VM must be able to deal
+with threads in more than two locations. This requires expanding
+the queue of runnable threads beyond a couple of just thread sets.
+It is tempting to place all threads in a priority queue where
+priority is determined by location in the input and precedence,
+but this approach would cause the running time to become
+$O(|regex||input|lg(|regex||input|))$, as retrieving the highest
+priority thread would become logarithmic in the number of
+of potential runnable threads rather than being constant.
+
+To retain the algorithmic properties demanded by the runqueue,
+we instead use a fixed size ring buffer of sparse sets, with
+each set containing threads $n$ characters forward in the input,
+where $n$ is the distance from the current sparse set. This means
+that skips further ahead in the input than the length of the ring
+buffer cannot be executed in one step, but we observe that most
+skips are smaller than $60$, the ring buffer size that we choose
+through benchmarking. It is more common for scan instructions to
+require being repeatedly deferred to the furthest forward sparse set,
+but we still observe a speedup in such cases.
+
+Figure \ref{fig:pikeexecchar} contains an example that walks though
+the representation of threads as the Pike VM steps through a simple
+program that decides the regex \verb'/a/'. Here threads are represented as
+a 2-tuple of an instruction pointer and an array of capture slots.
+There is no need to store a string pointer because the thread set
+which contains a thread implies its offset into the string.
+Instructions like \verb'save' do not advance the string pointer,
+so the first step of the Pike VM pops $t_0$, executes save instruction
+by saving the current string pointer to the first capture slot, then
+pushes a new thread, $t_1$, to the current thread set. The second step
+does advance the string pointer, so when $t_1$ is transformed into $t_2$
+it is pushed to the thread set at index 1 instead of index 0.
+
+Figure \ref{fig:pikeexecskip} contains an example that walks through
+the execution of a simple program containing the \verb'skip' instruction.
+This demonstrates the ability to jump forward in the input, by pushing
+a new thread to one of the thread sets further ahead in the ring buffer.
+In such a case the skip Pike VM will notice that intermediate thread
+sets are empty, and quickly skip over them.
+
+\begin{figure}
+\caption{Executing a {\tt char} Instruction in the skip Pike VM}
+\centering
+\label{fig:pikeexecchar}
+
+\begin{tabular}{ l l }
+\textbf{Instructions} &
+  \begin{tabular}{| r | l |}
+  \hline
+  Index & Instruction \\ \hline
+  0 & \verb'save 0' \\ \hline
+  1 & \verb'char a' \\ \hline
+  2 & \verb'save 1' \\ \hline
+  2 & \verb'match' \\ \hline
+  \end{tabular} \\ \\
+\textbf{Step 0, Thread Set Index = 0} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  $t_0 = \langle 0, [NONE, NONE] \rangle$ & & & \\ \hline
+  \end{tabular} \\ \\
+\textbf{Step 1, Thread Set Index = 0} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  $t_1 = \langle 1, [0, NONE] \rangle$ & & & \\ \hline
+  \end{tabular} \\ \\
+
+\textbf{Step 2, Thread Set Index = 0} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  & $t_2 = \langle 2, [0, NONE] \rangle$ & & \\ \hline
+  \end{tabular} \\ \\
+
+\textbf{End of Thread Set 0} & \\ \\
+
+\textbf{Step 3, Thread Set Index = 1} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  & $t_3 = \langle 3, [0, 1] \rangle$ & & \\ \hline
+  \end{tabular} \\ \\
+
+\textbf{Match} & \\
+
+\end{tabular}
+\end{figure}
+
+\begin{figure}
+\caption{Executing a {\tt skip} Instruction in the skip Pike VM}
+\centering
+\label{fig:pikeexecskip}
+
+\begin{tabular}{ l l }
+\textbf{Instructions} &
+  \begin{tabular}{| r | l |}
+  \hline
+  Index & Instruction \\ \hline
+  0 & \verb'save 0' \\ \hline
+  1 & \verb'skip 3' \\ \hline
+  2 & \verb'save 1' \\ \hline
+  2 & \verb'match' \\ \hline
+  \end{tabular} \\ \\
+\textbf{Step 0, Thread Set Index = 0} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  $t_0 = \langle 0, [NONE, NONE] \rangle$ & & & \\ \hline
+  \end{tabular} \\ \\
+\textbf{Step 1, Thread Set Index = 0} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  $t_1 = \langle 1, [0, NONE] \rangle$ & & & \\ \hline
+  \end{tabular} \\ \\
+
+\textbf{Step 2, Thread Set Index = 0} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  & & & $t_2 = \langle 2, [0, NONE] \rangle$ \\ \hline
+  \end{tabular} \\ \\
+
+\textbf{End of Thread Set 0} & \\ \\
+
+\textbf{End of Thread Set 1} & \\ \\
+
+\textbf{End of Thread Set 2} & \\ \\
+
+\textbf{Step 3, Thread Set Index = 3} &
+  \begin{tabular}{| c | c | c | c |}
+  \hline
+  & & & $t_2 = \langle 2, [0, 3] \rangle$ \\ \hline
+  \end{tabular} \\ \\
+
+\textbf{Match} & \\
+
+\end{tabular}
+\end{figure}

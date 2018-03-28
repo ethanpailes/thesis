@@ -1,0 +1,165 @@
+\chapter{Related Work}
+\label{chapter:relatedwork}
+
+\section{Some Regex History}
+
+Regular expressions have a dual history as both a theoretical
+and practical tool. Any regular expression corresponds to an
+NFA which decides its language, and thanks to a
+result from Rabin and Scott (\cite{Rabin1959}) we know that
+these NFAs can be translated into equivalent DFAs. The powerset
+construction they provide trades a potentially exponential runtime
+blowup for a potentially exponential space blowup.
+This is often the end of the story as presented in CS curricula,
+but for the regex implementer it is only the beginning. Both
+naive NFA simulation and naive DFA construction are potentially exponential
+in some respect. Even worse, DFAs created via the powerset construction
+cannot support features like capture groups and back references 
+which programmers have come to expect in a regular expression engine.
+
+The story of modern regex tools is the story of trying to grapple
+with the tradeoffs and capabilities of NFA vs DFA approaches.
+The lineage of the current generation of regular expression tools
+can be traced back to an implementation which compiled
+to PDP-11 machine code provided by Thompson (\cite{Thompson1968}).
+Thompson's work involved compiling directly to machine code, but
+future iterations on his work instead targeted virtual instruction
+sets and provided VM interpreters (\cite{CoxVirtualMachineApproach}).
+The two primary contributions of Thompson's paper were a translation
+from a regular expression to an NFA and a guaranteed linear time
+NFA simulation. Ironically, the first contribution is most commonly 
+remembered despite the fact that the paper spills very little ink
+on it and devotes most of its space to linear time simulation.
+It was really Aho, Hopcraft, and Ullman who formalized the regex to NFA
+translation as ``Thompson's Construction'' in a series of 
+publications, most notably ``The Design and Analysis of Computer Algorithms''
+(\cite{Aho1974}).
+
+The next chapter in regex tooling is about adding pragmatic text
+processing features. Building off of Thompson's work,
+Rob Pike added capture groups to the flavor of regular expressions
+he included in his Sam text editor (\cite{Pike1987}). Larry Wall's
+Perl programming language, released in 1987, included a builtin
+regular expression facility (\cite{Perl}). Perl's regular
+expressions included capture groups and back references, the
+latter feature actually making them non-regular. In order to
+support these features Perl's regex engine gave up on guaranteed
+linear time execution. It's backtracking NFA
+simulation was easier to implement, faster than Thomson's VM in most
+cases, and easier to add features to. The success of Perl and its
+emphasis on using regular expressions for text processing quickly
+lead to a proliferation of backtracking regex engines (\cite{PCRE},
+\cite{PCRE2}, \cite{Python}, Java, Javascript).
+
+Backtracking NFA simulations had come to dominate the regular
+expression landscape outside of theoretical circles by the
+time that Russ Cox began work on executing untrusted regular
+expressions. On the face of it, regular expressions with their
+restricted semantics seem like a reasonable thing to expose to
+untrusted users, but any backtracking implementation will inevitably
+be vulnerable to a DOS attack in the event that a malicious user
+provides a pathological regular expression. In order to
+overcome this issue Cox wrote RE2, a library
+which focuses on reclaiming guaranteed linear time execution (\cite{CoxRE2}).
+Like Perl before it, RE2 inspired other regex engines to
+follow its design philosophy, the most prominent of which are
+rust's regex library (\cite{GallantRegex}) and go's regex library
+(\cite{GoLang}).
+
+\section{Related Work}
+
+While capture groups were often part of regex implementations,
+they were not a main focus of study until Ville Laurikari laid
+out a submatch extraction algorithm with guaranteed linear time
+and space (\cite{Laurikari2001}). Laurikari's main contribution
+was the notion of a tagged NFA transition, essentially converting
+regex NFAs to transducers which accumulate captured text as they
+work. Laurikari's tagged transitions are closely related to the
+\verb'save' instruction found in many regex VM implementations
+(\cite{CoxVirtualMachineApproach}). The guaranteed linear
+running time of Laurikari's tagged NFAs makes them an excellent
+candidate for the sort of adversarial regex execution that RE2
+and its decedents aim to facilitate.
+
+Sulzman and Lu provide a regex submatch extraction algorithm
+based on the concept of regular expression differentiation
+(\cite{Sulzmann2012}). Rather than using a flavor of Thompson's
+Construction as all of the approaches touched on so far have done,
+their work is based off of a Glushkov automata (\cite{Allauzen2006}).
+An implementation of their algorithm in Haskell was as fast or
+faster than other native Haskell implementations, and competitive
+with C implementations. Sulzman and Lu's work relies on
+Antimirov's partial regular expression derivatives (\cite{Antimirov1996}),
+an extension of Brzozowski regular expression derivatives
+(\cite{Brzozowski1964}). Regex differentiation with respect
+to an input character involves stripping that character from
+the leading portion of the regex. For example the regex \verb'/ab/'
+differentiated with respect to the character \verb'a' is \verb'/b/'.
+Similarly, the regex \verb'/ab|ac/' differentiated with respect to
+\verb'a' is \verb'/b|c/'. This notion is closely related to the
+idea of first-sets which are key to determining when
+the skip optimizations presented in this thesis are safe to perform.
+
+Sub-string search, the problem of finding a shorter string (the needle) in
+a longer string (the haystack), is a simpler problem than regular expression
+matching, and one that can be solved faster. The family of fast sub-string
+search algorithms known as Boyer-Moore all involve some pre-processing of
+the needle to enable sub-linear running time (\cite{Boyer1977}).
+The subject of sub-string search is very closely studied, leading to
+endless variations on the core algorithm Robert Boyer and J Moore
+first presented. Fortunately for the uninitiated, Andrew Hume and
+Daniel Sunday performed a comprehensive review of the sub-string search
+literature, providing a clean taxonomy of sub-string search algorithms
+and a recommendation to use a variant called Tuned Boyer-Moore
+(\cite{Hume1991}). This is not, however, the end of the story.
+When we implemented Tuned Boyer-Moore, we found that it was seldom
+able to beat the simpler approach based on frequency analysis and
+the \verb'memchr' function already found in the \verb'regex' crate
+(\cite{GallantRegex}). On Intel machines this difference boils down
+to the use of the \verb'pcmpeqb' instruction, which allows multiple
+bytes to be checked at once (\cite{IntelInstructionManual}); other
+platforms have their own hardware acceleration for sub-string search. 
+While not quite as fast as pure sub-string search, the multiple
+sub-string search problem can also be decided quite a bit faster than
+full regex matching. In particular the Aho-Corasick algorithm provides
+fast multiple sub-string search (\cite{Aho1975}). Just like Boyer-Moore,
+Aho-Corasick looses out to a hardware accelerated variant despite it's
+theoretical elegance. The accelerated algorithm, called Teddy, seems
+to have first appeared in the extremely sophisticated
+hyperscan regex library (\cite{hyperscan}), and was reverse-engineered
+and illuminated in the Teddy library (\cite{Teddy}). The most important
+take-away of all of this is that sub-string and multiple sub-string
+search are quite a bit faster than full regular expression matching.
+
+Haber provides an efficient DFA based submatch extraction algorithm,
+which managed to get significant runtime speedups at the cost of
+increased compile time work (\cite{Haber2013}). The algorithm uses
+a deterministic finite transducer run backwards over the input
+to produce a stream of states. A second automata uses these
+states as input and is ultimately responsible for constructing
+the capture groups. Compilation is quite expensive, potentially
+going exponential and requiring the construction of four separate
+automata (two of which are intermediate automata that are quickly
+thrown out). Being a DFA approach, the algorithm also suffers from
+a potentially exponential blowup in the size of the DFA, but this
+situation seldom arises. The ability to compute capture groups with
+just DFAs represents a significant advance in the state of the art.
+
+Chivers provides a series of optimizations over standard NFA simulation
+approaches based on the notion of a regular expression preview
+(\cite{Chivers2016}). For any regex $r$, there exists a preview $p_n$
+such that $L(p_n) \supseteq \{ w[0..n] | w \in L(r) \}$. In English
+that means that an $n$-preview will recognize the first $n$ characters
+of a match, but it might turn up some false positives. The thing that
+makes previews useful as an optimization tool is that they can be
+decided with very simple DFAs, which enjoy much faster execution than
+the NFA simulation that Chivers embedded them in. Previews provide
+a quick way to fail fast before committing to a non-deterministic
+branch, and a good way to find candidate locations to attempt a
+full parse. In this way, previews bear a lot of similarities to the
+scan optimizations presented in this thesis. In fact, previews can be
+viewed as a generalization of literal scanning.
+
+% TODO: Briggs (An Efficient Representation of Sparse Sets)
+
+% TODO: Talk about one-pass DFAs

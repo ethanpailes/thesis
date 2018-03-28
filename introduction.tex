@@ -1,0 +1,164 @@
+\chapter{Introduction}
+\label{chapter:introduction}
+
+Pattern matching is a powerful tool for concisely and declarativly
+describing expected data. In the context of programming languages,
+pattern matching enables programmers to directly encode the shape
+of data they are interested in. The applications for textual pattern
+matching are even more widespread. Textual patterns are used for
+editing, ad-hoc parsing, url route dispatch, and a variety of
+bioinformatics processing tasks. This demand for textual pattern
+matching has led to a rich and evolved body of work on the subject.
+
+\section{The Problem}
+
+At their core, regex know how to answer two questions: ``Is this
+input in the language?'' (decision) and ``What are the capture
+groups?'' (parsing). Existing implementations can answer the former
+without the latter, but never answer the latter without checking
+the former. In cases where regular expressions are being used to
+parse text that is already known to match, there is extra work being done
+to re-validate the input along with parsing. If this work can be
+elided, there is a great deal of opportunity for optimization.
+This thesis aims to explore how possible it is to separate regular
+expression parsing from the regular expression decision problem,
+and to show that focusing entirely on parsing while paying decision
+no heed can yield speedups.
+
+Stated more formally, the problem we set out to solve is to find
+the most efficient way to compute $captures(e, w)$ where $e$ is
+a regular expression, $w \in L(e)$, and $captures$ is a function
+which returns the capture groups of a regular expression after
+a parse.
+
+To solve this problem, we present skip regex, a new regex engine
+which leverages the assumption that the input is in the language
+of the regex being parsed. Skip regex extends the regular expression
+backend with the ability to skip forward to an arbitrary point in the
+input.
+
+\section{Motivation}
+
+The original motivation for this work comes not from the realm of
+regular expressions, but from work on PADS, a language for ad-hoc
+data description (\cite{Fisher2005}), and Forest, a language for
+principled programming with ad-hoc file oriented databases
+(\cite{Fisher2011}). The need for a partial parse first
+came up in the context of Forest where queries sometimes depend on
+a small subset of a very large corpus of data stored in the filesystem.
+Forest uses PADS for parsing the contents of specific files, so the
+natural next step was to think about how partial parsing might
+be used in the context of ad-hoc data representations.
+
+A partial parse asks for a certain subset of a full parse tree,
+and allows any intervening data to be thrown out. It is impossible
+to perform a partial parse without assuming that the input text
+is in the language being parsed. This seems a little odd for a
+parsing problem, after all parsing is in large part about deciding
+languages, but it makes sense if only a subset of the input is
+examined. The whole purpose of a partial parse
+is to aid performance by only looking at the parts of the input which
+are absolutely necessary to understand the subset of the parse tree
+that we are really interested in. If we avoid looking at any part of
+the input, that portion of the input might contain syntax errors.
+Then if we want to only examine a subset of the input we must assume
+that the input is in the language being parsed.
+
+Compared with PADS, regular expressions have a small and
+constrained semantics which makes rapid iteration on new
+ideas easier. Regular expressions already have a very natural
+starting place for working on partial parsing built into their
+semantics in the form of capture groups. The idea that the user wants
+to know about the things inside capture groups but not outside of
+them aligns perfectly with the ideas we were developing about
+partial parsing. Any complete consideration of partial
+parsing in PADS will have to deal with partial parsing in regular
+expressions anyway, as regular expressions are important primitives in
+a PADS grammar. All of this pointed to regular expressions as a good
+starting point for research in partial parsing.
+
+There is also ample reason to examine partial parsing purely
+within the context of regular expressions. Situations where the input
+will always match, such as computing statistics from large log files
+or processing the output of a command line tool in a unix pipeline
+are the most obvious application. More interestingly, the
+relative speed of DFA vs NFA execution makes regex partial parsing
+useful for general regex parsing. DFAs can decide regular expressions,
+but not parse them or support perl-style back references. Despite
+these limitations, they are still used extensively by tuned regex
+implementations because they are much faster than direct NFA
+simulation (\cite{CoxRE2}, \cite{GallantRegex}, \cite{GoLang}).
+In fact, this difference is so great that
+some engines will first use a DFA to find the subset of the input
+which matches and then run an NFA on the matching (and hopefully
+smaller) input. Thus, this work is applicable
+to regular expression parsing regardless of whether or not the user
+can actually grantee that the input matches the expression.
+
+A final motivation to consider is the possibility for use
+in parsing trusted text. Programs often make a distinction between
+trusted and untrusted data, and then proceed to perform operations
+on trusted data that would be wildly unsafe on untrusted data.
+The most obvious example is in-memory data structures such as C structs, but
+it is also quite common with more modern text types such as
+a Python 3 \verb'string' or a Rust \verb'&str'. In Rust, programmers
+are allowed to perform several operations on a \verb'&str' which
+would be unsafe if it were not \verb'UTF-8', so when a \verb'&str'
+is first constructed the programmer must either ask Rust to validate
+the data or undertake a proof obligation that the data is good.\footnote{
+Via Rust's {\tt unsafe} system.} For systems that leave
+their data in textual form while in memory\footnote{
+Whether to save memory, avoid the cost of a full parse, remain
+flexible in the face of a possibly changing textual format, or
+just continue to work with poor legacy engineering decisions.}
+the ability to impose this common taxonomy between trusted and
+untrusted data could prove useful.
+
+\section{Claims}
+
+Skip regex can be used on their own or
+in concert with a DFA regex engine to get speedups for
+regex partial parsing or full regex parsing respectively.
+Skip regex are backwards compatible with Rust's regex crate.
+
+Regular expressions are a well established tool, so any change in
+semantics would violate the principle of least surprise.
+If the semantics of skip regex remain backwards compatible with
+existing implementations, users will find them easy to pick up.
+Backwards compatibility also leaves the door open for providing
+a skip regex based drop-in replacement for existing implementations.
+The biggest barrier to the drop-in replacement use case is the
+assumption that the input matches the expression. Fortunately,
+this issue can be overcome by using a DFA to filter out non-matching
+input. To demonstrate backwards compatibility we tested our implementation
+and argue that the optimizations we perform are semantics preserving.
+
+The assumption of matching input means that skip regex must be 
+handled with care to avoid violating this invariant.
+Skip regex are otherwise semantically backwards compatible, so
+performance is the only place where this added complexity cost can be
+offset. Stated another way, skip regex are an optimization,
+and optimizations are not worthwhile if they don't provide an
+actual performance win. To demonstrate the performance characteristics
+of skip regex, we provide micro benchmarks to showcase the specific
+capabilities of skip regex, case studies to demonstrate their
+usefulness and performance in more realistic scenarios, and a
+discussion of their time complexity.
+
+Skip regex are only interesting if they are useful to programmers.
+The easiest way that the skip regex engine could be useful to programmers
+would be if its optimizations were applicable to the sorts of regex they
+are already writing. To check for the applicability of skip optimizations
+on existing regex we scraped \verb'crates.io',
+the rust library repository, and checked to see which optimizations
+we could apply to each regex we found. Skip regex open up new programming
+possibilities by allowing users to make a distinction between trusted
+and untrusted textual data. New programming approaches cannot be 
+examined by looking at existing regular expressions, so we provide
+case studies to examine the possibilities of this new approach.
+
+% TODO: present the case for using skip regex as a sort of macro-assembler
+%       for handwritten data munging code.
+
+% TODO: explain what the different chapters of the thesis are going to
+%       talk about.

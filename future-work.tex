@@ -1,0 +1,77 @@
+\chapter{Future Work}
+\label{chapter:futurework}
+
+There is significant opportunity for skipping over more complicated
+expressions than just literals. The simplest case is skipping over
+alternatives where each branch is of the same length. A more interesting
+problem is adding AST rewrite passes which factor common prefixes and
+suffixes out of alternatives in order to increase the length of skips.
+For example \verb'/a(?:bbc|bbyx)/' might could be rewritten as
+\verb'/abb(?:c|yx)/'.
+
+Both the skip regex optimizations presented in this thesis and
+Chivers' notion of previews (\cite{Chivers2016}) represent
+extensions to the VM approach to NFA simulation. The approaches
+are compatible, so it would be interesting to see how an engine
+which makes use of both sets of optimizations performs. Beyond
+just being compatible with skip regex, regex previews have
+synergistic potential with them. In particular, previews make
+it possible to quickly scan forward to a point which might begin
+any regex, which ought to allow an expansion of the cases where
+the scan optimizations presented in this thesis are applicable.
+
+It would be nice to add support for unicode and case folding to
+the skip regex engine, as this would allow skip regex to be used
+as a truly drop-in replacement for the Rust regex crate\footnote{
+When used in conjunction with a DFA to filter out non-matching
+input}.
+
+The original motivation for investigating parsing a regex without
+deciding it was the need to perform a partial parse for the PADS
+language. Now that the problem of partial parsing has been worked
+out for regular expressions, a natural next step is to see how
+the work extends to a language like PADS. Of particular interest
+is the ability to decide when two PADS grammars have an empty
+intersection. PADS grammars tend to have a bit more structure
+than regex, so it seems like the $e*$ optimization has more
+potential than the $.*$ scan optimization. The ability to check
+if two pads grammars have an empty intersection is a key piece
+of analysis for enabling such an optimization. Another angle
+to consider is the fact that PADS grammars are not regular,
+which opens up the potential for optimizations. To scan
+forward over a parenthesized s-expression something like
+algorithm \ref{algo:sexpscan} seems to be the
+optimal solution. This sort of counting scan can't come up
+in the context of regular expressions due to their regularity,
+but it must be considered for PADS.
+
+\begin{algorithm}
+\caption{S-Exp Scan} \label{algo:sexpscan}
+\begin{algorithmic}
+\Procedure{SExpScan}{$i$}
+  \State $num\_parens \gets 0$
+  \State $in\_quote \gets false$
+  \While{true}
+    \If{$input[i] = '('$}
+      \If{$\neg in\_quote$}
+        \State $num\_parens \gets num\_parens + 1$
+      \EndIf
+    \ElsIf{$input[i] = ')'$}
+      \If{$\neg in\_quote$}
+        \State $num\_parens \gets num\_parens - 1$
+      \EndIf
+    \ElsIf{$input[i] = '"'$}
+      \State $in\_quote \gets \neg in\_quote$
+    \EndIf
+    \State $i \gets i + 1$
+    \If{$num\_parens = 0$}
+      \State \textbf{break}
+    \EndIf
+  \EndWhile
+  \State \textbf{return} i
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+% TODO: to facilitate optimization-aware programming I should make it
+%       easier to understand when a particular optimiztion is applied.

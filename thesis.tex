@@ -35,25 +35,34 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \documentclass[11pt,pdflatex]{report}         %% LaTeX2e document.
-\usepackage {thesis}              %% Preamble.
-\usepackage {url}
-\usepackage {graphicx}
-\usepackage {subfigure}
-\usepackage {fancyvrb}
-\usepackage {algorithm}
-\usepackage {algorithmic}
+\usepackage{thesis} % Preamble.
+\usepackage{syntax} % grammar environment
+\usepackage{amsmath} % rvert
+\usepackage{changepage} % adjustwidth
+\usepackage{url} % reference urls in bibliography
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
 \usepackage[usenames]{color}
-\usepackage{listings}
-\usepackage{amsmath}
 \usepackage{amssymb}
-\usepackage{multirow}
-\usepackage{ctable}
-\usepackage{tabulary} 
+
+% NFA drawings
+\usepackage{tikz}
+\usetikzlibrary{arrows,automata}
+
+% Add switch support to algpseudocode
+\algnewcommand\algorithmicswitch{\textbf{switch}}
+\algnewcommand\algorithmiccase{\textbf{case}}
+\algnewcommand\algorithmicassert{\texttt{assert}}
+\algnewcommand\Assert[1]{\State \algorithmicassert(#1)}%
+\algdef{SE}[SWITCH]{Switch}{EndSwitch}[1]{\algorithmicswitch\ #1\ \algorithmicdo}{\algorithmicend\ \algorithmicswitch}%
+\algdef{SE}[CASE]{Case}{EndCase}[1]{\algorithmiccase\ #1}{\algorithmicend\ \algorithmiccase}%
+\algtext*{EndSwitch}%
+\algtext*{EndCase}%
 
 %\usepackage{fullpage, setspace}
 
-% \mastersthesis                     %% Uncomment one of these; if you don't
-\phdthesis                         %% use either, the default is \phdthesis.
+\mastersthesis                     %% Uncomment one of these; if you don't
+% \phdthesis                         %% use either, the default is \phdthesis.
 
 \thesisdraft                       %% Uncomment this if you want a draft
                                      %% version; this will print a timestamp
@@ -74,11 +83,11 @@
                                      %% minimum spacing accepted by the
                                      %% Graduate School.
 
-\renewcommand{\thesisauthor}{Your Full Name}    %% Your name.
+\renewcommand{\thesisauthor}{Ethan Pailes}    %% Your name.
 
 \renewcommand{\thesismonth}{May}   %% Your month of graduation.
 
-\renewcommand{\thesisyear}{2016}      %% Your year of graduation.
+\renewcommand{\thesisyear}{2018}      %% Your year of graduation.
 
 % \renewcommand{\thesistitle}{System Design, Testing, Deployment, and
 % Management in a Component-based and Autonomic Way\\
@@ -86,16 +95,16 @@
 
 %\renewcommand{\thesistitle}{Augmented Training  Methods for Hidden Markov Model%s for the Detection of Remote Protein Homologs}
 
-\renewcommand{\thesistitle}{This is the title of my thesis}
+\renewcommand{\thesistitle}{Skip Regex: Parsing without Deciding}
 
                                      %% The title of your thesis; use
                                      %% mixed-case.
 
-\renewcommand{\thesisauthorpreviousdegrees}{BS, MS, Tufts; LLD, DC\&H}
+\renewcommand{\thesisauthorpreviousdegrees}{BS, Tufts; LLD, DC\&H}
                                      %% Your previous degrees, abbreviated;
                                      %% separate multiple degrees by commas.
 
-\renewcommand{\thesissupervisor}{Prof. Knuffle Bunny}
+\renewcommand{\thesissupervisor}{Prof. Kathleen Fisher}
                                      %% Your thesis supervisor; use mixed-case
                                      %% and don't use any titles or degrees.
 
@@ -106,10 +115,9 @@
                                      %% have a co-supervisor.
                                      %% (Ignored for Master's)
 
-\renewcommand{\thesiscommitteemembera}{Prof. Computer Scientist2}
-\renewcommand{\thesiscommitteememberb}{Prof. Computer Scientist3}
-\renewcommand{\thesiscommitteememberc}{Prof. Other Tufts}
-\renewcommand{\thesiscommitteememberd}{Prof. Mo Willems}
+\renewcommand{\thesiscommitteemembera}{Prof. Kathleen Fisher}
+\renewcommand{\thesiscommitteememberc}{Prof. Nathan Foster}
+\renewcommand{\thesiscommitteememberb}{Prof. Samuel Guyer}
 % \renewcommand{\thesiscommitteemembere}{}
 % \renewcommand{\thesiscommitteememberf}{}
 % \renewcommand{\thesiscommitteememberg}{}
@@ -120,16 +128,18 @@
                                      %% or degrees.  Uncomment as many
                                      %% as neccessary. (Ignored for Master's)
 
-\renewcommand{\thesisauthoraddress}{Halligan Hall\\
-Tufts University\\
-161 College Ave.
-Medford, MA 02155}
+\renewcommand{\thesisauthoraddress}{
+Ethan Pailes\\
+22 Duggan Rd\\
+Acton, MA 01720}
                                      %% Your permanent address; use "\\" for
                                      %% linebreaks.
 
 \renewcommand{\thesisdedication}{{\em To everyone who helped me get to grad school, helped me in grad school, or simply managed to put up with me while I was in graduate school. And to the people who finally let me leave.}}
                                      %% Your dedication, if you have one; use
                                      %% "\\" for linebreaks.
+% TODO: dedication
+
 
 \newtheorem{theorem}{Theorem}[section]
 \newtheorem{lemma}[theorem]{Lemma}
@@ -158,7 +168,7 @@ Medford, MA 02155}
 %%% are different from the default values in utthesis.sty.  To use them,
 %%% simply uncomment (remove the leading %) the line(s).
 
-% \renewcommand{\thesiscommitteesize}{5}
+\renewcommand{\thesiscommitteesize}{3}
                                      %% Uncomment this only if your thesis
                                      %% committee does NOT have 5 members
                                      %% for \phdthesis or 2 for \mastersthesis.
@@ -213,10 +223,12 @@ Medford, MA 02155}
 \listoffigures                     %% Uncomment this to generate list
                                    %% of figures.
 \include{introduction}             
-\include{chapter2/chapter2file}   
-\include{chapter3/chapter3file}         
-\include{chapter4/chapter4file}                
-                  
+\include{compilation}
+\include{implementation}
+\include{related-work}
+\include{evaluation}
+\include{future-work}
+\include{conclusion}
 
 %================================ END of chapters =============================
 

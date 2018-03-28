@@ -1,95 +1,539 @@
- Cf. http://nwalsh.com/tex/texhelp/bibtx-7.html
-% 
-% article:
-%     
-%     Required: author, title, journal, year
-%     
-%     Optional: volume, number, pages, month, note, key
-% 
-% inproceedings:
-%     
-%     Required: author, title, booktitle, year
-%     Optional: editor, pages, organization, publisher, address, month, note, ke
-y
-%     
-% techreport:
-%     
-%     Required: author, title, institution, year
-%     
-%     Optional: type, number, address, month, note, key
-%     
-% misc:  [Use this one for URLs.]
-%     
-%     Required: <none>
-
-%     
-%     Optional: author, title, howpublished, month, year, note, key
-% 
-@article{ articleKeyword,
-   author         = {},
-   title          = {},
-   journal        = {},
-   year           = {},  
-   volume         = {},
-   number         = {},
-   pages          = {},
-   month          = {},
-   note           = {},
-   key            = {}
+@article{Dube2000,
+ author = {Dub{\'e}, Danny and Feeley, Marc},
+ title = {Efficiently Building a Parse Tree from a Regular Expression},
+ journal = {Acta Inf.},
+ issue_date = {2000},
+ volume = {37},
+ number = {2},
+ month = oct,
+ year = {2000},
+ issn = {0001-5903},
+ pages = {121--144},
+ numpages = {24},
+ url = {http://dx.doi.org/10.1007/s002360000037},
+ doi = {10.1007/s002360000037},
+ acmid = {361193},
+ publisher = {Springer-Verlag New York, Inc.},
+ address = {Secaucus, NJ, USA},
 }
 
-@inproceedings{ inproceedingsKeyword,
-   author         = {},
-   title          = {},
-   booktitle      = {},
-   year           = {},
-   editor         = {},
-   pages          = {},
-   organization   = {},
-   publisher      = {},
-   address        = {},
-   month          = {},
-   note           = {},
-   key            = {}
+@article{Grathwohl2014,
+author = {Bj{\o}rn Bugge Grathwohl, Niels and Henglein, Fritz and Rasmussen, Ulrik},
+year = {2014},
+month = {09},
+pages = {224-240},
+title = {Optimally Streaming Greedy Regular Expression Parsing},
+isbn = {978-3-319-10881-0}
 }
 
-@techreport{ techreportKeyword,
-   author         = {},
-   title          = {},
-   institution    = {},
-   year           = {},
-   
-   type           = {},
-   number         = {},
-   address        = {},
-   month          = {},
-   note           = {},
-   key            = {}
+@inproceedings{Sulzmann2012,
+ author = {Sulzmann, Martin and Lu, Kenny Zhuo Ming},
+ title = {Regular Expression Sub-matching Using Partial Derivatives},
+ booktitle = {Proceedings of the 14th Symposium on Principles and Practice of Declarative Programming},
+ series = {PPDP '12},
+ year = {2012},
+ isbn = {978-1-4503-1522-7},
+ location = {Leuven, Belgium},
+ pages = {79--90},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/2370776.2370788},
+ doi = {10.1145/2370776.2370788},
+ acmid = {2370788},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {haskell, symbolic automata construction},
+} 
+
+@misc{CoxSimpleAndFast,
+  author = {Russ Cox},
+  title = {Regular Expression Matching Can Be Simple And Fast
+    (but is slow in Java, Perl, PHP, Python, Ruby, ...) },
+  howpublished = {\url{https://swtch.com/~rsc/regexp/regexp1.html}},
+  note = {Accessed: 2017-11-10}
 }
 
-@misc{ miscKeyword,
-
-   author         = {},
-   title          = {},
-   howpublished   = {},
-   month          = {},
-   year           = {},
-   note           = {},
-   key            = {}
+@misc{CoxVirtualMachineApproach,
+  author = {Russ Cox},
+  title = {Regular Expression Matching: the Virtual Machine Approach},
+  howpublished = {\url{https://swtch.com/~rsc/regexp/regexp2.html}},
+  note = {Accessed: 2018-02-19}
 }
 
+@book{Aho1974,
+ author = {Aho, Alfred V. and Hopcroft, John E. and J D Ullman},
+ title = {The Design and Analysis of Computer Algorithms},
+ year = {1974},
+ isbn = {0201000296},
+ edition = {1st},
+ publisher = {Addison-Wesley Longman Publishing Co., Inc.},
+ address = {Boston, MA, USA},
+} 
 
+@article{Thompson1968,
+ author = {Thompson, Ken},
+ title = {Programming Techniques: Regular Expression Search Algorithm},
+ journal = {Commun. ACM},
+ issue_date = {June 1968},
+ volume = {11},
+ number = {6},
+ month = jun,
+ year = {1968},
+ issn = {0001-0782},
+ pages = {419--422},
+ numpages = {4},
+ url = {http://doi.acm.org/10.1145/363347.363387},
+ doi = {10.1145/363347.363387},
+ acmid = {363387},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {match, regular expression, search},
+} 
 
-@book{kipling2010just,
-  title={Just so stories},
-  author={Kipling, Rudyard},
-  year={2010},
-  publisher={Penguin}
+@book{Aho:1986:CPT:6448,
+ author = {Aho, Alfred V. and Sethi, Ravi and Ullman, Jeffrey D.},
+ title = {Compilers: Principles, Techniques, and Tools},
+ year = {1986},
+ isbn = {0-201-10088-6},
+ publisher = {Addison-Wesley Longman Publishing Co., Inc.},
+ address = {Boston, MA, USA},
+} 
+
+@article{Grathwohl:2016:KCN:2914770.2837647,
+ author = {Grathwohl, Bj{\o}rn Bugge and Henglein, Fritz and Rasmussen, Ulrik Terp and S{\o}holm, Kristoffer Aalund and T{\o}rholm, Sebastian Paaske},
+ title = {Kleenex: Compiling Nondeterministic Transducers to Deterministic Streaming Transducers},
+ journal = {SIGPLAN Not.},
+ issue_date = {January 2016},
+ volume = {51},
+ number = {1},
+ month = jan,
+ year = {2016},
+ issn = {0362-1340},
+ pages = {284--297},
+ numpages = {14},
+ url = {http://doi.acm.org/10.1145/2914770.2837647},
+ doi = {10.1145/2914770.2837647},
+ acmid = {2837647},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {automaton, determinization, nondeterministic, regular, streaming, transducer},
 }
 
-@book{willems2007there,
-  title={There is a Bird on Your Head!},
-  author={Willems, Mo},
-  year={2007},
-  publisher={Hyperion Books for Children}
+@inproceedings{Henglein:2017:PPL:3018882.3018889,
+ author = {Henglein, Fritz and Rasmussen, Ulrik Terp},
+ title = {PEG Parsing in Less Space Using Progressive Tabling and Dynamic Analysis},
+ booktitle = {Proceedings of the 2017 ACM SIGPLAN Workshop on Partial Evaluation and Program Manipulation},
+ series = {PEPM 2017},
+ year = {2017},
+ isbn = {978-1-4503-4721-1},
+ location = {Paris, France},
+ pages = {35--46},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/3018882.3018889},
+ doi = {10.1145/3018882.3018889},
+ acmid = {3018889},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {Packrat, Parsing expression grammars, context-free grammars, regular expressions, streaming parsing},
+} 
+
+@article{Mamouras:2017:SMS:3140587.3062369,
+ author = {Mamouras, Konstantinos and Raghothaman, Mukund and Alur, Rajeev and Ives, Zachary G. and Khanna, Sanjeev},
+ title = {StreamQRE: Modular Specification and Efficient Evaluation of Quantitative Queries over Streaming Data},
+ journal = {SIGPLAN Not.},
+ issue_date = {June 2017},
+ volume = {52},
+ number = {6},
+ month = jun,
+ year = {2017},
+ issn = {0362-1340},
+ pages = {693--708},
+ numpages = {16},
+ url = {http://doi.acm.org/10.1145/3140587.3062369},
+ doi = {10.1145/3140587.3062369},
+ acmid = {3062369},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {Quantitative Regular Expressions, data stream processing},
 }
+
+@article{Matos:1994:IUP:181773.181780,
+ author = {Matos, Armando B.},
+ title = {An Introduction to Ultimately Periodic Sets of Integers},
+ journal = {SIGACT News},
+ issue_date = {March 1994},
+ volume = {25},
+ number = {1},
+ month = mar,
+ year = {1994},
+ issn = {0163-5700},
+ pages = {90--96},
+ numpages = {7},
+ url = {http://doi.acm.org/10.1145/181773.181780},
+ doi = {10.1145/181773.181780},
+ acmid = {181780},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+	@comment = {
+      Discussion of ultimately periodic sets in the event that that
+        helps us decide where to start parsing.
+      Provides the result that the set of all lengths of a regular
+        language is ultimately periodic.
+      Introduces delta sums
+  }
+}
+
+@article{Brzozowski1964,
+ author = {Brzozowski, Janusz A.},
+ title = {Derivatives of Regular Expressions},
+ journal = {J. ACM},
+ issue_date = {Oct. 1964},
+ volume = {11},
+ number = {4},
+ month = oct,
+ year = {1964},
+ issn = {0004-5411},
+ pages = {481--494},
+ numpages = {14},
+ url = {http://doi.acm.org/10.1145/321239.321249},
+ doi = {10.1145/321239.321249},
+ acmid = {321249},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+	@comment = {
+		The original paper on using derivitives to impliment regular expressions.
+	}
+} 
+
+@article{Briggs1993,
+ author = {Briggs, Preston and Torczon, Linda},
+ title = {An Efficient Representation for Sparse Sets},
+ journal = {ACM Lett. Program. Lang. Syst.},
+ issue_date = {March\&\#8211;Dec. 1993},
+ volume = {2},
+ number = {1-4},
+ month = mar,
+ year = {1993},
+ issn = {1057-4514},
+ pages = {59--69},
+ numpages = {11},
+ url = {http://doi.acm.org/10.1145/176454.176484},
+ doi = {10.1145/176454.176484},
+ acmid = {176484},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {compiler implementation, register allocation, set operations, set representations},
+	@comment = {
+		Should cite this when talking about how to make the PikeVM fast.
+		Explain that the backtracker becomes slow on large input even before
+		it goes exponential because it can't use this trick.
+	}
+} 
+
+@Inbook{Haber2013,
+author="Haber, Stuart
+and Horne, William
+and Manadhata, Pratyusa
+and Mowbray, Miranda
+and Rao, Prasad",
+editor="Dediu, Adrian-Horia
+and Mart{\'i}n-Vide, Carlos
+and Truthe, Bianca",
+title="Efficient Submatch Extraction for Practical Regular Expressions",
+bookTitle="Language and Automata Theory and Applications: 7th International Conference, LATA 2013, Bilbao, Spain, April 2-5, 2013. Proceedings",
+year="2013",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="323--334",
+abstract="A capturing group is a syntax used in modern regular expression implementations to specify a subexpression of a regular expression. Given a string that matches the regular expression, submatch extraction is the process of extracting the substrings corresponding to those subexpressions. Greedy and reluctant closures are variants on the standard closure operator that impact how submatches are extracted. The state of the art and practice in submatch extraction are automata based approaches and backtracking algorithms. In theory, the number of states in an automata-based approach can be exponential in n, the size of the regular expression, and the running time of backtracking algorithms can be exponential in ℓ, the length of the string. In this paper, we present an O(ℓc) runtime automata based algorithm for extracting submatches from a string that matches a regular expression, where c{\thinspace}>{\thinspace}0 is the number of capturing groups. The previous fastest automata based algorithm was O(nℓc). Both our approach and the previous fastest one require worst-case exponential compile time. But in practice, the worst case behavior rarely occurs, so achieving a practical speed-up against state-of-the-art methods is of significant interest. Our experimental results show that, for a large set of regular expressions used in practice, our algorithm is approximately twice as fast as Java's backtracking based regular expression library and approximately twenty times faster than the RE2 regular expression engine.",
+isbn="978-3-642-37064-9",
+doi="10.1007/978-3-642-37064-9_29",
+url="https://doi.org/10.1007/978-3-642-37064-9_29"
+}
+
+@misc{Laurikari2001,
+  author = {Ville Laurikari},
+  title = {{Efficient submatch addressing for regular expressions}},
+  howpublished = {\url{https://laurikari.net/ville/regex-submatch.pdf}},
+  school = {Helsinki University of Technology},
+  address = {Helsinki, Finland},
+  note = {Accessed: 2017-11-10},
+  year = {2001},
+}
+
+@article{Fisher2005,
+ author = {Fisher, Kathleen and Gruber, Robert},
+ title = {PADS: A Domain-specific Language for Processing Ad Hoc Data},
+ journal = {SIGPLAN Not.},
+ issue_date = {June 2005},
+ volume = {40},
+ number = {6},
+ month = jun,
+ year = {2005},
+ issn = {0362-1340},
+ pages = {295--304},
+ numpages = {10},
+ url = {http://doi.acm.org/10.1145/1064978.1065046},
+ doi = {10.1145/1064978.1065046},
+ acmid = {1065046},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {data description language, domain-specific languages},
+}
+
+@misc {RegexRs,
+  title = {regex},
+  author = {Andrew Gallant and The Rust Project Developers},
+  howpublished = {\url{https://doc.rust-lang.org/regex/regex/index.html}},
+  note = {Accessed: 2017-12-4},
+}
+
+@article{Pike1987,
+ author = {Pike, Rob},
+ title = {The Text Editor Sam},
+ journal = {Softw. Pract. Exper.},
+ issue_date = {November 1, 1987},
+ volume = {17},
+ number = {11},
+ month = nov,
+ year = {1987},
+ issn = {0038-0644},
+ pages = {813--845},
+ numpages = {33},
+ url = {http://dx.doi.org/10.1002/spe.4380171105},
+ doi = {10.1002/spe.4380171105},
+ acmid = {35707},
+ publisher = {John Wiley \& Sons, Inc.},
+ address = {New York, NY, USA},
+}
+
+@misc{Fisher2011,
+  author = {Fisher, Kathleen and Foster, Nate and Walker, David and Qili Zhu, Kenny},
+  year = {2011},
+  month = {09},
+  pages = {292-306},
+  title = {Forest: A Language and Toolkit for Programming with Filestores},
+  volume = {46},
+  booktitle = {Sigplan Notices - SIGPLAN}
+}
+
+@misc{CoxRE2,
+  author = {Cox, Russ and Wankadia, Paul},
+  date = {2018},
+  month = {02},
+  title = {RE2},
+  version = {2018-02-01},
+  form = {[Computer program]},
+  url = {https://github.com/google/re2/releases/tag/2018-02-01},
+}
+  
+@misc{GallantRegex,
+  author = {Gallant, Andrew},
+  date = {2018},
+  month = {02},
+  title = {regex},
+  version = {0.2.6},
+  form = {[Computer program]},
+  url = {https://crates.io/crates/regex/0.2.6j},
+}
+
+@misc{GoLang,
+  date = {2018},
+  month = {02},
+  title = {go},
+  version = {1.10},
+  form = {[Computer program]},
+  url = {https://github.com/golang/go/releases/tag/go1.10},
+}
+
+@article{Rabin1959,
+ author = {Rabin, M. O. and Scott, D.},
+ title = {Finite Automata and Their Decision Problems},
+ journal = {IBM J. Res. Dev.},
+ issue_date = {April 1959},
+ volume = {3},
+ number = {2},
+ month = apr,
+ year = {1959},
+ issn = {0018-8646},
+ pages = {114--125},
+ numpages = {12},
+ url = {http://dx.doi.org/10.1147/rd.32.0114},
+ doi = {10.1147/rd.32.0114},
+ acmid = {1661909},
+ publisher = {IBM Corp.},
+ address = {Riverton, NJ, USA},
+}
+
+@misc{Perl,
+  date = {2017},
+  month = {09},
+  title = {perl},
+  version = {5.26.1},
+  form = {[Computer program]},
+  url = {http://www.cpan.org/src/5.0/perl-5.26.1.tar.gz},
+}
+
+@misc{PCRE,
+  date = {2017},
+  month = {07},
+  title = {pcre},
+  version = {8.41},
+  form = {[Computer program]},
+  url = {ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre},
+}
+
+@misc{PCRE2,
+  date = {2018},
+  month = {02},
+  title = {pcre2},
+  version = {10.31},
+  form = {[Computer program]},
+  url = {ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre},
+}
+
+@misc{Python,
+  date = {2018},
+  month = {02},
+  title = {python},
+  version = {3.4.8},
+  form = {[Computer program]},
+  url = {https://www.python.org/downloads},
+}
+
+@misc{hyperscan,
+  date = {2018},
+  month = {01},
+  title = {hyperscan},
+  version = {4.7.0},
+  form = {[Computer program]},
+  url = {https://github.com/intel/hyperscan/releases},
+}
+
+@misc{Teddy,
+  date = {2016},
+  month = {11},
+  title = {Teddy},
+  version = {0.2.0},
+  form = {[Computer program]},
+  url = {https://github.com/jneem/teddy/releases},
+}
+
+@inproceedings{Allauzen2006,
+ author = {Allauzen, Cyril and Mohri, Mehryar},
+ title = {A Unified Construction of the Glushkov, Follow, and Antimirov Automata},
+ booktitle = {Proceedings of the 31st International Conference on Mathematical Foundations of Computer Science},
+ series = {MFCS'06},
+ year = {2006},
+ isbn = {3-540-37791-3, 978-3-540-37791-7},
+ location = {Star\&\#225; Lesn\&\#225;, Slovakia},
+ pages = {110--121},
+ numpages = {12},
+ url = {http://dx.doi.org/10.1007/11821069_10},
+ doi = {10.1007/11821069_10},
+ acmid = {2135990},
+ publisher = {Springer-Verlag},
+ address = {Berlin, Heidelberg},
+}
+
+@article{Antimirov1996,
+ author = {Antimirov, Valentin},
+ title = {Partial Derivatives of Regular Expressions and Finite Automaton Constructions},
+ journal = {Theor. Comput. Sci.},
+ issue_date = {March 11, 1996},
+ volume = {155},
+ number = {2},
+ month = mar,
+ year = {1996},
+ issn = {0304-3975},
+ pages = {291--319},
+ numpages = {29},
+ url = {http://dx.doi.org/10.1016/0304-3975(95)00182-4},
+ doi = {10.1016/0304-3975(95)00182-4},
+ acmid = {231848},
+ publisher = {Elsevier Science Publishers Ltd.},
+ address = {Essex, UK},
+}
+
+@article{Boyer1977,
+ author = {Boyer, Robert S. and Moore, J. Strother},
+ title = {A Fast String Searching Algorithm},
+ journal = {Commun. ACM},
+ issue_date = {Oct. 1977},
+ volume = {20},
+ number = {10},
+ month = oct,
+ year = {1977},
+ issn = {0001-0782},
+ pages = {762--772},
+ numpages = {11},
+ url = {http://doi.acm.org/10.1145/359842.359859},
+ doi = {10.1145/359842.359859},
+ acmid = {359859},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {bibliographic search, computational complexity, information retrieval, linear time bound, pattern matching, text editing},
+}
+
+@article{Hume1991,
+ author = {Hume, Andrew and Sunday, Daniel},
+ title = {Fast String Searching},
+ journal = {Softw. Pract. Exper.},
+ issue_date = {Nov. 1991},
+ volume = {21},
+ number = {11},
+ month = nov,
+ year = {1991},
+ issn = {0038-0644},
+ pages = {1221--1248},
+ numpages = {28},
+ url = {http://dx.doi.org/10.1002/spe.4380211105},
+ doi = {10.1002/spe.4380211105},
+ acmid = {137560},
+ publisher = {John Wiley \& Sons, Inc.},
+ address = {New York, NY, USA},
+ keywords = {Boyer-Moore, pattern matching, string searching},
+} 
+
+@manual{IntelInstructionManual,
+  author = {Intel},
+  title = {Intel 64 and IA-32 Architectures Software Developer’s Manual. Combined Volumes: 1, 2A, 2B, 2C, 2D, 3A, 3B, 3C, 3D and 4},
+  year = {2017},
+  month = {02},
+  language = {English},
+  version = {Order Number: 325462-065US},
+  organization = {Intel Corperation},
+  pagetotal = {4810},
+  pubstate = {December, 2017},
+}
+
+@article{Chivers2016,
+title = "Optimising Unicode Regular Expression Evaluation with Previews",
+abstract = "The jsre regular expression library was designed to provide fast matching of complex expressions over large input streams using user-selectable character encodings. An established design approach was used: a simulated non-deterministic automaton (NFA) implemented as a virtual machine, avoiding exponential cost functions in either space or time. A deterministic automaton (DFA) was chosen as a general dispatching mechanism for Unicode character classes and this also provided the opportunity to use compact DFAs in various optimization strategies. The result was the development of a regular expression Preview which provides a summary of all the matches possible from a given point in a regular expression in a form that can be implemented as a compact DFA and can be used to further improve the performance of the standard NFA simulation algorithm. This paper formally defines a preview and describes and evaluates several optimizations using this construct. They provide significant speed improvements accrued from fast scanning of anchor positions, avoiding retesting of repeated strings in unanchored searches, and efficient searching of multiple alternate expressions which in the case of keyword searching has a time complexity which is logarithmic in the number of words to be searched.",
+author = "Chivers, {Howard Robert}",
+note = "© 2016 John Wiley \& Sons, Ltd. This is an author-produced version of the published paper. Uploaded in accordance with the publisher’s self-archiving policy. Further copying may not be permitted; contact the publisher for details",
+year = "2016",
+month = "9",
+journal = "Software: Practice and Experience",
+issn = "0038-0644",
+publisher = "John Wiley and Sons Ltd",
+}
+
+@article{Aho1975,
+ author = {Aho, Alfred V. and Corasick, Margaret J.},
+ title = {Efficient String Matching: An Aid to Bibliographic Search},
+ journal = {Commun. ACM},
+ issue_date = {June 1975},
+ volume = {18},
+ number = {6},
+ month = jun,
+ year = {1975},
+ issn = {0001-0782},
+ pages = {333--340},
+ numpages = {8},
+ url = {http://doi.acm.org/10.1145/360825.360855},
+ doi = {10.1145/360825.360855},
+ acmid = {360855},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {bibliographic search, computational complexity, finite state machines, information retrieval, keywords and phrases, string pattern matching, text-editing},
+} 

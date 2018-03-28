@@ -1,0 +1,41 @@
+\chapter{Conclusion}
+\label{chapter:conclusion}
+
+The primary objectives of this thesis were the production of a
+fast and useful implementation of regular expression parsing,
+and laying theoretical groundwork for future work in partial
+parsing.
+
+We examined the performance profile of skip regex in detail
+using microbenchmarks, and provided application level performance
+numbers through case studies. Both types of benchmarks suggest
+that skip regex can produce a speedup over existing
+implementations. The case studies we present provide examples
+of how skip regex might be applicable, but to further
+the claim of applicability we show that over 80\% of regex
+found on \verb'crates.io' can benefit from some sort of
+skip optimization.
+
+In addition to being a suitable replacement for standard
+regex with the help of a DFA filter, skip regex open up
+a new approach to programming. Programmers have long made
+the distinction between trusted and untrusted binary data.
+Skip regex provide a systemic approach to handling trusted
+textual data. The usefulness of this distinction is hard to
+evaluate without giving programmers time to use the new tool,
+but the existence of the analogous distinction with respect to
+binary data is promising.
+
+This thesis uncovered a number of insights that ought to be
+useful for examining partial parsing in the context of PADS.
+We have shown that while substring search is in the same complexity
+class as regular expression parsing, the difference in constant
+factor is so huge that looking for opportunities to scan forward
+to some literal is very important. The work on analyzing the
+ambiguity at branch points and checking for regex intersection
+ought to be useful when attempting to analyze PADS grammars
+for optimization.
+
+Skip regex are fast, applicable to real applications, open
+up a new approach to programming with trusted text, and lay
+the groundwork for further work in partial parsing.
