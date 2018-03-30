@@ -13,6 +13,8 @@ clean:
 	rm -f *.log
 	rm -f *.blg
 	rm -f *.toc
+	rm -f *.lot
+	rm -f *.lof
 
 watch:
 	watchexec --exts tex,bib make

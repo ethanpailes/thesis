@@ -10,7 +10,7 @@ editing, ad-hoc parsing, url route dispatch, and a variety of
 bioinformatics processing tasks. This demand for textual pattern
 matching has led to a rich and evolved body of work on the subject.
 
-\section{The Problem}
+\section{The Problem: Partial Parsing}
 
 At their core, regex know how to answer two questions: ``Is this
 input in the language?'' (decision) and ``What are the capture
@@ -36,6 +36,11 @@ which leverages the assumption that the input is in the language
 of the regex being parsed. Skip regex extends the regular expression
 backend with the ability to skip forward to an arbitrary point in the
 input.
+
+\subsection{The Partial Parsing Invariant}
+
+We define the partial parsing invariant to mean that the
+input being parsed is in the language being parsed.
 
 \section{Motivation}
 
@@ -68,7 +73,8 @@ Compared with PADS, regular expressions have a small and
 constrained semantics which makes rapid iteration on new
 ideas easier. Regular expressions already have a very natural
 starting place for working on partial parsing built into their
-semantics in the form of capture groups. The idea that the user wants
+semantics in the form of capture groups. In fact all regex parses
+can be thought of as partial parses. The idea that the user wants
 to know about the things inside capture groups but not outside of
 them aligns perfectly with the ideas we were developing about
 partial parsing. Any complete consideration of partial
