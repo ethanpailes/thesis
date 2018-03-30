@@ -26,6 +26,16 @@ as a truly drop-in replacement for the Rust regex crate\footnote{
 When used in conjunction with a DFA to filter out non-matching
 input}.
 
+In cases where multiple optimizations apply we currently just
+choose the optimization with the highest precedence. A more comprehensive
+cost model would allow for better optimization selection.
+
+A formalization of the informal correctness arguments made about
+the optimizations presented in this thesis would be quite nice
+to have. The tests and informal reasoning provide some confidence
+that the optimizations presented here are sound, but formalism
+would significantly strengthen this confidence.
+
 The original motivation for investigating parsing a regex without
 deciding it was the need to perform a partial parse for the PADS
 language. Now that the problem of partial parsing has been worked
@@ -38,15 +48,16 @@ potential than the $.*$ scan optimization. The ability to check
 if two pads grammars have an empty intersection is a key piece
 of analysis for enabling such an optimization. Another angle
 to consider is the fact that PADS grammars are not regular,
-which opens up the potential for optimizations. To scan
+which opens up the potential for new optimizations. To scan
 forward over a parenthesized s-expression something like
 algorithm \ref{algo:sexpscan} seems to be the
 optimal solution. This sort of counting scan can't come up
-in the context of regular expressions due to their regularity,
-but it must be considered for PADS.
+in the context of regular languages, but it must be considered for PADS.
 
 \begin{algorithm}
-\caption{S-Exp Scan} \label{algo:sexpscan}
+\caption{S-Exp Scan}
+\label{algo:sexpscan}
+
 \begin{algorithmic}
 \Procedure{SExpScan}{$i$}
   \State $num\_parens \gets 0$

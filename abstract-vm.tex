@@ -1,0 +1,247 @@
+\chapter{Regular Expressions and An Abstract VM for Their Execution}
+\label{chapter:abstractvm}
+
+The work presented in this thesis focuses on improvements to the
+speed with which NFAs can be simulated through the use of a
+specialized virtual machine, a common approach to regular
+expression implementation (\cite{CoxVirtualMachineApproach}).
+This chapter introduces the regular expression grammar we will
+work with, and the abstract virtual machine that we will target for
+execution. Implementation of this machine will be covered in chapter
+\ref{chapter:implementation}.
+
+\section{Regular Expressions}
+\label{section:regexdef}
+
+Before going into the semantics of the virtual machine, we
+define the regular expression grammar we will focus on.
+Keeping the syntax and semantics of regular expressions in
+mind should help motivate the structure of the VM we present
+in section \ref{section:vm}.
+
+A regular expression can decide whether or not a given string
+matches and which substrings of the input match particular
+subsections of the regular expression, called capture groups.
+Here $\Sigma$ represents the alphabet from which characters in
+the input string are drawn.
+
+\begin{grammar}
+  <e> ::= $e e$
+  \alt $e \rvert e$
+  \alt $(e)$
+  \alt $\epsilon$
+  \alt $\alpha$ {\tt where} $\alpha \subset \Sigma$
+  \alt $e*$
+  \alt $e+$
+  \alt $e*?$
+  \alt $e+?$
+  \alt $.$
+\end{grammar}
+
+$e e$ represents concatenation of the two expressions,
+$e|e$ represents choice between the two expressions, $(e)$ indicates a
+capture group around $e$, $e*$ represents the Kleene closure of $e$,
+$\epsilon$ represents the empty regular expression which matches nothing,
+and $a$ indicates a regular expression which matches a character set.
+These forms alone are enough to talk about regular expressions, as
+the remaining forms can all be implemented in terms of this core set.
+The simpler formulation is usually preferred for theoretical work because
+it provides a smaller surface area that proofs must work with. 
+
+Of the remaining forms, $e+$ represents $e$ repeated 1 or more times,
+$e*?$, called lazy Kleene star, is a version of $e*$ which always prefers
+the shortest match rather than the longest, $e+?$ is a version of
+$e+$ which prefers the shortest match, and $.$ is a convenient
+way to say $a$ where $a = \Sigma$. These more complex forms are
+included despite the theoretical preference for simplicity in
+order to facilitate discussion of optimizations.
+
+Some of the more complex forms found in the source language of real
+world regular expressions can be implemented more efficiently directly
+than they would otherwise be if first implemented in terms of the
+simpler form. For example, $e*$ requires an extra branch when compared
+with $e+$ to account for the possibility of zero repetitions.
+In order to fully explain the details of each of the
+optimizations presented below, we therefore retain some of the more
+interesting higher level forms. The implementation of greedy vs lazy
+repetition ($e*$ vs $e*?$) differs
+slightly, so we also include the extra repetition forms in order to
+address those differences below.
+
+Typical abstract regular expression syntax lacks a way to talk about
+precedence separate from capture groups. For the sake of simplicity,
+we have not added such a form to the above grammar, but it remains
+useful to be able to write example regular expressions with explicit
+precedence. In such cases we will use $(?:e)$ to indicate a grouping
+of $e$ without a corresponding capture. This is the same concrete syntax
+provided by the Rust regex crate.
+
+\subsection{Literals}
+
+Literals are fixed strings of characters of length one or more.
+Stated differently, $l$ is called a literal if $l = a+$ for $a \in \Sigma$.
+
+\section{Nondeterministic Finite Automata}
+\label{section:nfadef}
+
+While most of the work in this thesis will focus on the representation
+of an NFA as a VM program, it is still sometimes useful to talk about
+a more traditional representation. To facilitate these cases, and to
+provide additional context for the definition of the regex VM we offer
+a brief definition of an NFA here.
+
+An NFA $n$ is defined as a 5-tuple of the form
+$\langle Q, \Sigma, \Delta, q_0, F \rangle$ where $Q$ is the
+set of states, $\Sigma$ is the alphabet, $\Delta$ is the transition
+function, $q_0$ is the initial state, and $F$ is a set of accepting
+states. We define the $\Delta$ function as a multiset of elements
+with the form $\langle q_f, c \rangle \rightarrow q_t$ where
+$q_f$ and $q_t$ are states in $Q$ and $c$ is a character in $\Sigma$.
+
+\section{The Regular Expression VM}
+\label{section:vm}
+
+One approach to regular expression matching is to compile regular expressions
+to a set of bytecode instructions for a specially designed VM. There
+are several different potential VM implementations, each with its own
+set of trade offs, but each of these back-ends share the same bytecode
+and compiler front end. In order to understand the compiler, it
+is important to first develop an understanding of the abstractions
+that the target machine provides.
+
+Regex VM instructions are executed in the context of a VM thread.
+A VM thread consists of an instruction pointer, which indicates
+the next VM instruction to be executed, an input cursor which
+indicates the current position in the input to be matched, and
+a finite number of capture slots. Capture slots are uses to
+track the start and end of capture groups with one slot for each
+end of the capture. After the regex execution, the capture groups
+are reconstructed from these slots. The \verb'save' instruction is
+responsible for placing the appropriate breadcrumbs in the slots.
+Threads may spawn multiple child threads at once which are logically
+non-deterministically executed. This first class non-determinism 
+makes it possible to easily encode the natural non-determinism of
+a regular expression. The main project of regex VM back-ends is
+efficiently managing the non-determinism.
+
+VM instructions can be thought of as belonging to three different categories:
+control flow, tests, and bookkeeping. Control flow instructions deal with
+spawning, killing, and modifying threads. Tests examine the input to determine
+whether the current thread can survive. Bookkeeping instructions track metadata,
+in particular information about where capture groups begin and end.
+Many of the instructions come from standard regex simulation
+techniques, but several have been added to support the optimizations
+presented in this thesis. Descriptions of the standard instructions 
+can be found in table \ref{table:insts}, while descriptions of the
+extensions can be found in \ref{table:skipinsts}.
+
+\subsection{Code Blocks and Addresses}
+
+Regex VM instructions are laid out in a linear fashion, just like
+machine code for real processors. A VM program consists of a list of
+VM bytecodes, each of which is addressed by its offset. During
+execution, an instruction pointer indicates the current instruction.
+After an instruction has been executed, the instruction pointer
+is incremented unless the definition of the instruction (such as
+the \verb'jmp' instruction) says otherwise. Labels can be used
+in place of fixed addresses to provide convenient names for
+use in branching code. A label is equivalent to the address
+of the next instruction which appears.
+
+\begin{table}[ht]
+\centering
+\caption{Core VM Instructions}
+\label{table:insts}
+
+This table defines the VM instructions used by standard regex engines.
+Our extensions to the instruction set can be found in table
+\ref{table:skipinsts}.
+\begin{tabular}{| l | c | p{9cm} |} \hline
+Instruction & Inst Type(s) & Description \\ \hline
+{\tt split $l_1$ $l_2$} & Control Flow &
+    \verb'split' tells the VM to spawn new threads, $t_1$ at $l_1$ 
+    and $t_2$ at $l_2$. The parent thread dies.
+    If $t_1$ or any of its children match and
+    $t_2$ or any of its children match, the VM must return
+    the match from $t_1$. Thus the code:
+        \begin{verbatim}
+
+split L1 L2
+L1: save 2
+    char {x|y}
+    save 3
+L2: save 4
+    char {y|z}
+    save 5
+match
+        \end{verbatim}
+    executed on \verb'y' would result in the first capture group
+    (specified by slots 2 and 3) being populated with a \verb'y'
+    even though both branches would result in a match. On the
+    other hand, if the labels in the split instruction were
+    flipped, the second capture slot (specified by slots 4 and 5)
+    would be populated with \verb'y' instead.
+
+    Actual implementations often choose to mutate the parent thread in
+    place and only spawn a single new thread.
+    \\ \hline
+{\tt jmp $l_1$} & Control Flow &
+    \verb'jmp' tells the VM to set the instruction pointer
+    to $l_1$. Note that the input cursor does not move. \\ \hline
+{\tt match} & Control Flow &
+    \verb'match' indicates a match. The VM may stop. The behavior of match
+    is slightly complicated by the presence of an end anchoring
+    (\verb'$'). If the regex is anchored at the end, a match instruction
+    only counts if the string pointer indicates the end of the input.
+    \\ \hline
+{\tt save $s$} & Bookkeeping &
+    \verb'save' tells the VM to save the current string
+    offset into capture slot $s$. \\ \hline
+{\tt char $\alpha$} & Test &
+    \verb'char' tells the VM to kill the current thread unless
+    the current char is in $\alpha$ (where $\alpha \subset \Sigma$).
+    If the current char is in $\alpha$, the VM must advance the input cursor
+    for the current thread. \\ \hline
+\end{tabular}
+\end{table}
+
+
+
+\begin{table}[ht]
+\centering
+
+\begin{tabular}{ | l | c | p{8cm} | } \hline
+Instruction & Inst Type(s) & Description \\ \hline
+{\tt skip $n$} & Control Flow &
+    \verb'skip' tells the VM to advance the input cursor by $n$.
+    Skip is an extension
+    instruction provided specifically to facilitate the optimizations
+    presented here. \\ \hline
+{\tt scan-end $l$} & Test \& Control Flow &
+    This test instruction tells the VM to scan forward in the input to find
+    the literal $l$. If $l$ is not found, the VM must kill the current thread,
+    otherwise it must place the input cursor
+    right after the end of $l$ in the input. For example executing
+        \begin{verbatim}
+        scan-end ``foo''
+        \end{verbatim}
+    on \verb'xxxxfooyy' would place the string pointer at the first \verb'y'
+    char. \verb'scan-end' is an extension instruction.
+
+    While a test instruction, the \verb'scan-end' instruction can
+    significantly advance the input cursor, so it can also be classified
+    as a control flow instruction. \\ \hline
+{\tt scan-begin$l$} & Test \& Control Flow &
+    This instruction behaves just like \verb'scan-end' except that the
+    VM must place the input cursor at the beginning of the literal on
+    a successful match. \verb'scan-begin' is an extension instruction.
+    \\ \hline
+{\tt goto-end $l$} & Control Flow &
+    This instruction tells the VM to just jump to the end of the input.
+    It is included to facilitate optimizing trailing $.*$ expressions.
+    \\ \hline
+\end{tabular}
+
+\caption{Skip VM Instructions}
+\label{table:skipinsts}
+\end{table}

@@ -1,407 +1,131 @@
 \chapter{Compilation}
 \label{chapter:compilation}
 
-\section{Notation}
+\section{Analysis}
 
-\subsection{Regular Expressions}
+As is often the case when it comes to compile time optimizations,
+the optimizations presented in this thesis cannot always be
+applied. In order to determine when they can be applied, we must
+first perform various analyses. This section introduces concepts
+that help us determine when it is safe to scan or jump forward over the
+input corresponding to a particular subexpression.
 
-Consider regular expressions described by the following AST. A
-regular expression can decide whether or not a given string
-matches and which substrings of the input match particular
-subsections of the regular expression, called capture groups.
-Here $\Sigma$ represents the alphabet from which characters in
-the input string are drawn.
-
-\begin{grammar}
-  <e> ::= $e e$
-  \alt $e \rvert e$
-  \alt $(e)$
-  \alt $\epsilon$
-  \alt $\alpha$ {\tt where} $\alpha \subset \Sigma$
-  \alt $e*$
-  \alt $e+$
-  \alt $e*?$
-  \alt $e+?$
-  \alt $.$
-\end{grammar}
-
-Here $e e$ represents concatenation of the two expressions,
-$e|e$ represents choice between the two expressions, $(e)$ indicates a
-capture group around $e$, $e*$ represents the Kleene closure of $e$,
-$\epsilon$ represents the empty regular expression which matches nothing,
-and $a$ indicates a regular expression which matches a character set.
-These forms alone are enough to talk about regular expressions, as
-the remaining forms can all be implemented in terms of this core set.
-The simpler formulation is usually preferred for theoretical work because
-it provides a smaller surface area that proofs must work with. 
-
-Of the remaining forms, $e+$ represents $e$ repeated 1 or more times,
-$e*?$, called lazy Kleene star, is a version of $e*$ which always prefers
-the shortest match rather than the longest, $e+?$ is a version of
-$e+$ which prefers the shortest match, and $.$ is a convenient
-way to say $a$ where $a = \Sigma$. These more complex forms are
-included despite the theoretical preference for simplicity in
-order to facilitate discussion of optimizations.
-
-Some of the more complex forms found in the source language of real
-world regular expressions can be implemented more efficiently directly
-than they would otherwise be if first implemented in terms of the
-simpler form. For example, $e*$ requires an extra branch when compared
-with $e+$ to account for the possibility of zero repetitions.
-In order to fully explain the details of each of the
-optimizations presented below, we therefore retain some of the more
-interesting higher level forms. The implementation of greedy vs lazy
-repetition ($e*$ vs $e*?$) differs
-slightly, so we also include the extra repetition forms in order to
-address those differences below.
-
-Typical abstract regular expression syntax lacks a way to talk about
-precedence separate from capture groups. For the sake of simplicity,
-we have not added such a form to the above grammar, but it remains
-useful to be able to write example regular expressions with explicit
-precedence. In such cases we will use $(?:e)$ to indicate a grouping
-of $e$ without a corresponding capture. This is the same concrete syntax
-provided by the rust regex crate.
-
-\subsection{Literals}
-
-Literals are fixed strings of characters of length one or more.
-Stated differently, $l$ is called a literal if $l = a+$ for $a \in \Sigma$.
-
-\section{First Sets}
+\subsection{First Sets}
 
 In order to make sure that the correct branch is taken in cases of
 ambiguity, we will need to be able to talk about the set of characters
 which might possibly start a regex match. To this end we introduce the
 notion of a first set here. Let $e$ be a regular expression.
-${first(w) \rvert w \in L(e)}$ where $first$ takes just the first charicter
+$\{first(w) \rvert w \in L(e)\}$ where $first$ takes just the first character
 from a word, is the first set for $e$. The first set for a given
 regular expression can be computed by the recursive function $fset$,
-which is defined as follows
+which is defined in figure \ref{fig:fsetdef}.
 
-\[
-  fset(e_1 e_2) = fset(e_1)
-\]
-\[
-  fset(e_1 \rvert e_2) = fset(e_1) \cup fset(e_2)
-\]
-\[
-  fset((e)) = fset(e)
-\]
-\[
-  fset(\epsilon) = \emptyset
-\]
-\[
-  fset(\alpha) = \alpha
-\]
-\[
-  fset(e*) = fset(e+) = fset(e*?) = fset(e+?) = fset(e)
-\]
-\[
-  fset(.) = \Sigma
-\]
-
-
-\section{The Regular Expression VM}
-
-One approach to regular expression matching is to compile regular expressions
-to a set of bytecode instructions for a specially designed VM. There
-are several different potential VM implementations, each with its own
-set of trade offs, but each of these back-ends share the same bytecode
-and compiler front end. In order to understand the compiler, it
-is important to first develop an understanding of the abstractions
-that the target machine provides.
-
-Regex VM instructions are executed in the context of a VM thread.
-A VM thread consists of an instruction pointer, which indicates
-the next VM instruction to be executed, an input cursor which
-indicates the current position in the input to be matched, and
-a finite number of capture slots. Capture slots are uses to
-track the start and end of capture groups with one slot for each
-end of the capture. After the regex execution, the capture groups
-are reconstructed from these slots. The \verb'save' instruction is
-responsible for placing the appropriate breadcrumbs in the slots.
-Threads may spawn multiple child threads at once which are logically
-non-deterministically executed. This first class non-determinism 
-makes it possible to easily encode the natural non-determinism of
-a regular expression. The main project of regex VM back-ends is
-efficiently managing the non-determinism.
-
-VM instructions can be thought of as belonging to three different categories:
-control flow, tests, and bookkeeping. Control flow instructions deal with
-spawning, killing, and modifying threads. Tests examine the input to determine
-whether the current thread matches. Bookkeeping instructions track metadata,
-in particular information about where capture groups begin and end.
-Many of the instructions come from standard regex simulation
-techniques, but several have been added to support the optimizations
-presented here. Complete descriptions of the instructions can be found
-in table \ref{tab:insts}.
-
-\subsection{Code Blocks and Addresses}
-
-Regex VM instructions are laid out in a linear fashion, just like
-machine code for real processors. A VM program consists of a list of
-VM bytecodes, each of which is addressed by its offset. During
-execution, an instruction pointer indicates the current instruction.
-After an instruction has been executed, the instruction pointer
-is incremented unless the definition of the instruction (such as
-the \verb'jmp' instruction) says otherwise. Labels can be used
-in place of fixed addresses to provide convenient names for
-use in branching code. A label is equivalent to the address
-of the next instruction which appears.
-
-\begin{table}[ht]
-
-\centering
-\vspace*{-2.5cm}
-\begin{adjustwidth}{-2cm}{}
-
-\begin{tabular}{ | l | c | c | p{10cm} | } \hline
-Instruction & Inst Type(s) & Extension & Description \\ \hline
-{\tt split $l_1$ $l_2$} & Control Flow & No &
-    Tells the VM to move the instruction
-    pointer to $l_1$, and spawn another thread at
-    label $l_2$. If the parent thread or any of its
-    children match and the child thread or any of its children match,
-    choose the match from the parent thread tree. Thus the code
-
-        \begin{verbatim}
-        split L1 L2
-        L1: save 2
-            char {x|y}
-            save 3
-        L2: save 4
-            char {y|z}
-            save 5
-        match
-        \end{verbatim}
-
-    executed on \verb'y' would result in the first capture group
-    (specified by slots 2 and 3) being populated with a \verb'y'
-    even though both branches would result in a match. On the
-    other hand, if the labels in the split instruction were
-    flipped, the second capture slot (specified by slots 4 and 5)
-    would be populated with \verb'y' instead.
-    \\ \hline
-{\tt jmp $l_1$} & Control Flow & No &
-    Tells the VM to set the instruction pointer
-    to $l_1$. Note that the input cursor does not move.  \\ \hline
-{\tt match} & Control Flow & No &
-    Indicates a match. The VM may stop. \\ \hline
-{\tt skip $n$} & Control Flow & Yes &
-    Tells the VM to advance the input
-    cursor by $n$. Skip is an extension instruction provided specifically
-    to facilitate the optimizations presented here. \\ \hline
-{\tt save $s$} & Bookkeeping & No &
-    Tells the VM to save the current string
-    offset into capture slot $s$. \\ \hline
-{\tt char $\alpha$} & Test & No &
-    Tells the VM to kill the current thread unless
-    the current char is in $\alpha$ (where $\alpha \subset \Sigma$).
-    If the current char is in $\alpha$, the VM must advance the input cursor
-    for the current thread. \\ \hline
-{\tt scan-end $l$} & Test \& Control Flow & Yes &
-    This test instruction tells the VM to scan forward in the input to find
-    the literal $l$. If $l$ is not found, the VM must kill the current thread,
-    otherwise it must place the input cursor
-    right after the end of $l$ in the input. For example executing
-
-        \begin{verbatim}
-        scan-end ``foo''
-        \end{verbatim}
-
-    on \verb'xxxxfooyy' would place the string pointer at the first \verb'y'
-    char. \verb'scan-end' is an extension instruction.
-
-    While a test instruction, the \verb'scan-end' instruction can
-    significantly advance the input cursor, so it can also be classified
-    as a control flow instruction. \\ \hline
-{\tt scan-begin$l$} & Test \& Control Flow & Yes &
-    This instruction behaves just like \verb'scan-end' except that the
-    VM must place the input cursor at the beginning of the literal on
-    a successful match. \verb'scan-begin' is an extension instruction.
-    \\ \hline
-{\tt goto-end $l$} & Control Flow & Yes &
-    This instruction tells the VM to just jump to the end of the input.
-    It is included to facilitate optimizing trailing $.*$ expressions.
-    \\ \hline
+\begin{figure}
+\label{fig:fsetdef}
+\caption{fset}
+\begin{tabular}{l c l c l c l}
+$fset(e_1 e_2)$ & $=$ & $fset(e_1)$ & &
+  $fset(e_1 \rvert e_2)$ & $=$ & $fset(e_1) \cup fset(e_2)$ \\
+$fset((e))$ & $=$ & $fset(e)$ & &
+  $fset(\epsilon)$ & $=$ & $\emptyset$ \\
+$fset(\alpha)$ & $=$ & $\alpha$ & &
+  $fset(e*)$ & $=$ & $fset(e)$ \\
+$fset(e+)$ & $=$ & $fset(e)$ & &
+  $fset(e*?)$ & $=$ & $fset(e+?)$ \\
+$fset(.)$ & $=$ & $\Sigma$ & & & & \\
 \end{tabular}
-\end{adjustwidth}
+\end{figure}
 
-\caption{VM Instructions}
-\label{tab:insts}
-\end{table}
-
-\section{Compilation}
-
-In this section, we define \verb'code', a compilation function mapping
-from regular expressions to VM instructions. Compilation of regular
-expressions for an ordinary VM proceeds as follows. In the context
-of VM instructions, sets are written in \verb'SCREAMING_SNAKE_CASE'.
-
-\subsection{{\tt code}($e1 e2$)}
-
-\begin{verbatim}
-code(e1)
-code(e2)
-\end{verbatim}
-
-\subsection{{\tt code}($e1 \rvert e2$)}
-
-\begin{verbatim}
-split L1 L2
-L1: code(e1)
-    jmp L3
-L2: code(e2)
-L3:
-\end{verbatim}
-
-\subsection{{\tt code}($(e)$)}
-
-\begin{verbatim}
-save n
-code(e)
-save n+1
-\end{verbatim}
-
-Here \verb'n' is given by $(i*2) + 2$ where $i$ is the index of
-the current capture group in the regular expression. Slots $0$
-and $1$ are reserved for capturing the entire match, which is
-where the extra $2$ in the formula comes from. A nice corollary
-is that we can always know the number of slots that
-will be required ahead of time by computing $(c*2) + 2$
-where $c$ is the total number of capture groups.
-
-\subsection{{\tt code}($\epsilon$)}
-
-The empty code block.
-
-\subsection{{\tt code}($a$)}
-
-\begin{verbatim}
-char a
-\end{verbatim}
-
-\subsection{{\tt code}($e*$)}
-
-\begin{verbatim}
-split L1 L2
-L1: code(e)
-    split L1 L2
-L2: 
-\end{verbatim}
-
-\subsection{{\tt code}($e+$)}
-
-\begin{verbatim}
-L1: code(e)
-    split L1 L2
-L2: 
-\end{verbatim}
-
-\subsection{{\tt code}($e*?$)}
-
-\begin{verbatim}
-split L2 L1
-L1: code(e)
-    split L2 L1
-L2: 
-\end{verbatim}
-
-\subsection{{\tt code}($e+?$)}
-
-\begin{verbatim}
-L1: code(e)
-    split L2 L1
-L2: 
-\end{verbatim}
-
-\subsection{{\tt code}($.$)}
-
-\begin{verbatim}
-char SIGMA
-\end{verbatim}
-
-\section{Regular Expression Intersection: A Decision Problem}
+\subsection{Regular Expression Intersection: A Decision Problem}
 
 In this section we introduce the concept of regular expression
 intersection, and specialize it to a decision problem determining
 if the intersection of two regex is empty. This is a useful
 piece of analysis for performing optimizations on skip regex
 because an empty intersection indicates that no string is in
-the language of both regex. This means that in a context where
-a particular chunk of input might correspond to one of several
-non-intersecting sub-expressions, a match against one sub-expression
-immediately eliminates the need to check the other sub-expressions.
+the language of both regex. In particular, the optimizations
+presented in section \ref{section:littermscan} would not be
+possible without the ability to decide if the intersection
+of two regex is empty.
 
-\subsection{Intersection Automata}
+\subsubsection{Intersection Automata}
 
 The easiest way to reason about regular expression intersection
-is through automita. To decide the intersection of two NFAs we
-can just run them both in lockstep on the same input stream
-and see if they both end up in accepting states. Running two
-NFAs in lockstep requires a specific input, so it does not allow
-us to do any static checking, but it sets us in the right direction.
+is through automita. To decide the intersection of two NFAs
+(as defined in section \ref{section:nfadef}) we
+can run them both in lockstep on the same input stream
+and see if they both end up in accepting states at the same time.
+Running two NFAs in lockstep requires a specific input, so this insight
+does not allow us to do any static checking, but it sets us in the
+right direction.
+
 A regex automita decides the empty set if no final state is reachable
 from the start state, so if we can construct a new NFA which simulates
 running two NFAs in lockstep, we will be able to statically determine
-if the intersection of two regex is empty. We construct an
+if the intersection of two regex is empty using standard graph
+search algorithms. We construct an
 intersecting automita by taking the Cartesian product
 of the two state sets to form a new state set, then adding edges
 between states only where both NFAs could make progress on a particular
 character of input. This idea is unpacked more formally below.
 
 Let $e_1$ and $e_2$ be regular expressions. Let
-$n_1 = \langle Q_1, \Sigma, \Delta_1, q_{\{1,0\}}, F_1 \rangle$ and
-$n_2 = \langle Q_2, \Sigma, \Delta_2, q_{\{2,0\}}, F_2 \rangle$
+$n_1 = \langle Q_1, \Sigma, \Delta_1, q_{1,0}, F_1 \rangle$ and
+$n_2 = \langle Q_2, \Sigma, \Delta_2, q_{2,0}, F_2 \rangle$
 be NFAs such that $n_1$ decides $e_1$ and $n_2$ decides $e_2$.
-Construct $n_i = \langle Q_i, \Sigma, \Delta_i, \langle q_{\{1,0\}}, q_{\{2,0\}} \rangle, F_i \rangle$
+Construct $n_i = \langle Q_i, \Sigma, \Delta_i, \langle q_{1,0}, q_{2,0} \rangle, F_i \rangle$
 where
 $$Q_i = Q_1 \times Q_2$$
 $$F_i = \{ \langle q_1, q_2 \rangle \mid q_1 \in F_1 \wedge q_2 \in F_2\}$$
 \begin{equation}
 \begin{split}
-  \Delta_i = \{ \langle \langle q_{\{1, f\}}, q_{\{2, f\}} \rangle, c \rangle
-                    \rightarrow \langle q_{\{1, t\}}, q_{\{2, t\}} \rangle
-                \mid
-                  (\langle q_{\{1, f\}}, c \rangle \rightarrow q_{\{1, t\}}) \in \Delta_1
-                  \wedge
-                  (\langle q_{\{2, f\}}, c \rangle \rightarrow q_{\{2, t\}}) \in \Delta_2
-             \} \\
-             \cup
-             \{
-                \langle \langle q_{\{1, f\}}, q_{\{2, f\}} \rangle, \epsilon \rangle
-                  \rightarrow \langle q_{\{1, f\}}, q_{\{2, t\}} \rangle
-                \mid
-                  (\langle q_{\{1, f\}}, c \rangle \rightarrow q_{\{1, t\}}) \in \Delta_1
-                  \wedge
-                  (\langle q_{\{2, f\}}, \epsilon \rangle \rightarrow q_{\{2, t\}}) \in \Delta_2
-             \} \\
-             \cup
-             \{
-                \langle \langle q_{\{1, f\}}, q_{\{2, f\}} \rangle, \epsilon \rangle
-                  \rightarrow \langle q_{\{1, t\}}, q_{\{2, f\}} \rangle
-                \mid
-                  (\langle q_{\{1, f\}}, \epsilon \rangle \rightarrow q_{\{1, t\}}) \in \Delta_1
-                  \wedge
-                  (\langle q_{\{2, f\}}, c \rangle \rightarrow q_{\{2, t\}}) \in \Delta_2
-             \} \\
-             \cup
-             \{
-                \langle \langle q_{\{1, f\}}, q_{\{2, f\}} \rangle, \epsilon \rangle
-                  \rightarrow \langle q_{\{1, t\}}, q_{\{2, t\}} \rangle
-                \mid
-                  (\langle q_{\{1, f\}}, \epsilon \rangle \rightarrow q_{\{1, t\}}) \in \Delta_1
-                  \wedge
-                  (\langle q_{\{2, f\}}, \epsilon \rangle \rightarrow q_{\{2, t\}}) \in \Delta_2
-             \}
+  \Delta_i =
+    \{ \langle \langle q_{1, f}, q_{2, f} \rangle, c \rangle
+            \rightarrow \langle q_{1, t}, q_{2, t} \rangle
+        \mid
+          (\langle q_{1, f}, c \rangle \rightarrow q_{1, t}) \in \Delta_1
+          \wedge
+          (\langle q_{2, f}, c \rangle \rightarrow q_{2, t}) \in \Delta_2
+     \} \\
+     \cup
+     \{
+        \langle \langle q_{1, f}, q_{2, f} \rangle, \epsilon \rangle
+          \rightarrow \langle q_{1, f}, q_{2, t} \rangle
+        \mid
+          (\langle q_{1, f}, c \rangle \rightarrow q_{1, t}) \in \Delta_1
+          \wedge
+          (\langle q_{2, f}, \epsilon \rangle \rightarrow q_{2, t}) \in \Delta_2
+     \} \\
+     \cup
+     \{
+        \langle \langle q_{1, f}, q_{2, f} \rangle, \epsilon \rangle
+          \rightarrow \langle q_{1, t}, q_{2, f} \rangle
+        \mid
+          (\langle q_{1, f}, \epsilon \rangle \rightarrow q_{1, t}) \in \Delta_1
+          \wedge
+          (\langle q_{2, f}, c \rangle \rightarrow q_{2, t}) \in \Delta_2
+   \} \\
+     \cup
+     \{
+        \langle \langle q_{1, f}, q_{2, f} \rangle, \epsilon \rangle
+          \rightarrow \langle q_{1, t}, q_{2, t} \rangle
+        \mid
+          (\langle q_{1, f}, \epsilon \rangle \rightarrow q_{1, t}) \in \Delta_1
+          \wedge
+          (\langle q_{2, f}, \epsilon \rangle \rightarrow q_{2, t}) \in \Delta_2
+       \}
 \end{split}
 \end{equation}
 
 The most interesting part of this construction is the creation of the
 new delta function. Edges are only added to $\Delta_i$ when a particular
-character $c$ shows up in both input delta functions. Epsilon edges count
-as wild card characters.
+character $c$ shows up in both input delta functions. The first set in
+the union covers this most intuitive case, but we still need to consider
+the presence of $\epsilon$ edges. The last three sets add edges in the
+compound NFA when $\epsilon$ shows up in either of the input NFAs.
+Note the way that only the side of the compound state with an
+epsilon advances.
 
 To illustrate this process consider the intersection of NFAs corresponding
 to \verb'/aa/' (figure \ref{fig:NFAaa}) and \verb'/ab/'
@@ -430,9 +154,9 @@ two regex is not empty, as we would expect.
   \node[initial,state]   (Q0)                {$q_0$}; 
   \node[state]           (Q1) [right of=Q0]  {$q_1$}; 
   \node[state,accepting] (Q2) [right of=Q1]  {$q_2$}; 
-  \path (Q0) edge node {$a$} (Q1)
+  \path (Q0) edge node [above] {$a$} (Q1)
 
-        (Q1) edge node {$a$} (Q2);
+        (Q1) edge node [above] {$a$} (Q2);
 \end{tikzpicture}
 \label{fig:NFAaa}
 \end{figure}
@@ -446,9 +170,9 @@ two regex is not empty, as we would expect.
   \node[initial,state]   (Q0)                {$q_0$}; 
   \node[state]           (Q1) [right of=Q0]  {$q_1$}; 
   \node[state,accepting] (Q2) [right of=Q1]  {$q_2$}; 
-  \path (Q0) edge node {$a$} (Q1)
+  \path (Q0) edge node [above] {$a$} (Q1)
 
-        (Q1) edge node {$b$} (Q2);
+        (Q1) edge node [above] {$b$} (Q2);
 \end{tikzpicture}
 \label{fig:NFAab}
 \end{figure}
@@ -462,7 +186,7 @@ two regex is not empty, as we would expect.
   \node[initial,state]   (Q00)                 {$q_{0,0}$}; 
   \node[state]           (Q11) [right of=Q00]  {$q_{1,1}$}; 
   \node[state,accepting] (Q22) [right of=Q11]  {$q_{2,2}$}; 
-  \path (Q00) edge node {$a$} (Q11)
+  \path (Q00) edge node [above] {$a$} (Q11)
         ;
 \end{tikzpicture}
 \label{fig:NFAaa:ab}
@@ -478,13 +202,13 @@ two regex is not empty, as we would expect.
   \node[state]           (Q1) [right of=Q0]  {$q_1$}; 
   \node[state]           (Q2) [right of=Q1]  {$q_2$}; 
   \node[state,accepting] (Q3) [right of=Q2]  {$q_3$}; 
-  \path (Q0) edge node {$\epsilon$} (Q1)
-             edge [bend right] node {$\epsilon$} (Q3)
+  \path (Q0) edge node [above] {$\epsilon$} (Q1)
+             edge [bend right] node [above] {$\epsilon$} (Q3)
 
-        (Q1) edge node {$a$} (Q2)
+        (Q1) edge node [below] {$a$} (Q2)
 
-        (Q2) edge node {$\epsilon$} (Q3)
-             edge [bend right] node {$\epsilon$} (Q1)
+        (Q2) edge node [above] {$\epsilon$} (Q3)
+             edge [bend right] node [above] {$\epsilon$} (Q1)
         ;
 \end{tikzpicture}
 \label{fig:NFAastar}
@@ -500,66 +224,70 @@ two regex is not empty, as we would expect.
   \node[state]           (Q01) [below of=Q00] {$q_{0,1}$}; 
   \node[state]           (Q03) [below of=Q01] {$q_{0,3}$}; 
 
-  \node[state]           (Q11) [right of=Q00] {$q_{1,1}$}; 
-  \node[state]           (Q12) [below of=Q11] {$q_{1,2}$}; 
+  \node[state]           (Q12) [right of=Q01] {$q_{1,2}$}; 
+  \node[state]           (Q11) [right of=Q12] {$q_{1,1}$}; 
   \node[state]           (Q13) [below of=Q12] {$q_{1,3}$}; 
 
   \node[state]           (Q22) [right of=Q11] {$q_{2,2}$}; 
-  \node[state]           (Q21) [below of=Q22] {$q_{2,1}$}; 
+  \node[state]           (Q21) [above of=Q11] {$q_{2,1}$}; 
   \node[state,accepting] (Q23) [below of=Q22] {$q_{2,3}$}; 
 
-  \path (Q00) edge [bend left]   node {$\epsilon$} (Q01)
-        (Q00) edge [bend right]  node {$\epsilon$} (Q03)
+  \path (Q00) edge [bend left]   node [right] {$\epsilon$} (Q01)
+        (Q00) edge [bend right]  node [left] {$\epsilon$} (Q03)
 
-        (Q01) edge node {$a$} (Q12)
+        (Q01) edge node [above] {$a$} (Q12)
 
-        (Q12) edge node {$\epsilon$} (Q11)
-        (Q12) edge node {$\epsilon$} (Q13)
+        (Q12) edge node [above] {$\epsilon$} (Q11)
+        (Q12) edge node [right] {$\epsilon$} (Q13)
 
-        (Q11) edge node {$a$} (Q22)
-        (Q11) edge node {$a$} (Q23)
-        (Q11) edge node {$a$} (Q21)
+        (Q11) edge node [above] {$a$} (Q22)
+        (Q11) edge node [right] {$a$} (Q23)
+        (Q11) edge node [right] {$a$} (Q21)
         ;
 \end{tikzpicture}
 \label{fig:NFAaa:astar}
 \end{figure}
 
-% TODO: proof.
-
-\subsection{Regex Intersection on VM Instructions}
+\subsubsection{Regex Intersection on VM Instructions}
 
 While regular expression intersection is most elegantly stated
 in terms of abstract NFAs and the construction of an entirely
 new automata, this approach needs to be modified if it is
-to be used in the context of a VM NFA simulation. The regex
-VM instructions used for implementation are a representation
-of an NFA, but not in the usual set-of-states and transition
+to be used in the context of a VM NFA simulation. A regex
+VM program is a representation of an NFA, but not in the usual
+set-of-states and transition
 table sort of way. Additionally, constructing an entirely
 new NFA consumes space on the order of the product of the
 size of the two input NFAs. Instead, we use the concept of
-iterators, a key tool for the Rust programming language,
+iterators, a primary warcry of the Rust programming language,
 to provide the ability to explore a compound NFA without
 ever materializing it. Rather than using a compiled
 skip regex we use a regex compiled to use the unextended
-set of VM instructions. This simplifies our job, and prevents
+set of VM instructions. This simplifies our job by reducing
+the number of instructions we need to handle, and prevents
 compiling skip instructions from recursively compiling any
 subexpressions.
 
 To see how to decide the intersection of two NFAs described
-by VM instructions, consider the algorithm laid out in
-algorithm \ref{algo:regexinter}. In the algorithm presented
-we use iterator generators (expressed with the \verb'yield' keyword),
+by VM instructions, consider algorithm \ref{algo:regexinter}.
+In the algorithm presented we use iterator generators
+(expressed with the \verb'yield' keyword),
 a feature common to programming languages which support coroutines
-such as Python or Lua. Helper iterators over a single NFA are defined
+such as Python. Helper iterators over a single NFA are defined
 in algorithm \ref{algo:nfaiter}. Rust does not yet support generators, so the
 actual implementation instead uses explicit state machines, but
-we use generators here to make it easier to focus on the underlying
+we use iterator generators here to make it easier to focus on the underlying
 algorithm.
 
 \begin{algorithm}
 \caption{VM NFA Intersection} \label{algo:regexinter}
 \begin{algorithmic}
 \Procedure{NFAIntersectionIsEmpty}{$n_1$, $n_2$}
+  \State Assume the existence of a $start$ function defined on
+          VM programs which returns the starting instruction.
+  \State Assume the existence of a $next$ function defined on
+          VM program instructions which returns the next instruction
+          in the program.
   \State $resume \gets [\langle start(n_1), start(n_2) \rangle]$
   \State $seen \gets \{\}$
   \While{$\langle s_1, s_2 \rangle \gets resume.pop()$}
@@ -662,24 +390,144 @@ algorithm.
 \end{algorithmic}
 \end{algorithm}
 
+\section{Compiling without Optimization}
+\label{section:compilation}
 
-\section{Skip and Scan Optimizations} \label{skipscanopt}
+In this section, we define \verb'code', a compilation function mapping
+from regular expressions to VM instructions. The approach taken here
+draws heavy inspiration from Russ Cox's writeup of the virtual machine
+approach to regular expressions (\cite{CoxVirtualMachineApproach}).
+The \verb'code' function we present does not produce optimized code,
+but serves as a baseline over which we will layer optimizations
+in section \ref{section:skipscanopt}.
+\verb'code' performs some simple case analysis on its input and emits a
+recursively defined blob of code. The particulars of this translation can
+be found in table \ref{table:codedef}.
 
-Sometimes we can do better than the default compilation path. If any of
+In the context of VM instructions, sets are written in
+\texttt{SCREAMING\allowbreak\_SNAKE\allowbreak\_CASE}.
+When a new label is mentioned in table
+\ref{table:codedef} assume that it is fresh and unique as if it has
+come from a \verb'gensym' like routine.
+
+\begin{table}[ht]
+\label{table:codedef}
+\caption{Code Function}
+
+\centering
+\begin{tabular}{| l | l | p{8cm} |} \hline
+Expression & Emitted VM Code & Discussion \\ \hline
+$e_1 e_2$ &
+  \begin{minipage}{3cm}
+  \begin{verbatim}
+
+code(e1)
+code(e2)
+  \end{verbatim}
+  \end{minipage}
+  & \\ \hline
+$e_1 \rvert e_2$ &
+  \begin{minipage}{3cm}
+  \begin{verbatim}
+
+split L1 L2
+L1: code(e1)
+    jmp L3
+L2: code(e2)
+L3:
+  \end{verbatim}
+  \end{minipage}
+  & \\ \hline
+$(e)$ &
+  \begin{minipage}{3cm}
+  \begin{verbatim}
+
+save n
+code(e)
+save n+1
+  \end{verbatim}
+  \end{minipage}
+  & 
+  Here \verb'n' is given by $(i*2) + 2$ where $i$ is the index of
+  the capture group being compiled in the regular expression. Slots $0$
+  and $1$ are reserved for capturing the entire match, which is
+  where the extra $2$ in the formula comes from. A nice corollary
+  is that we can always know the number of slots that
+  will be required ahead of time by computing $(c*2) + 2$
+  where $c$ is the total number of capture groups.
+  \\ \hline
+$\epsilon$ & & The empty code block.  \\ \hline
+$\alpha$ & \verb'char ALPHA' & Here \verb'ALPHA' is $\alpha$ \\ \hline
+$e*$ &
+  \begin{minipage}{3cm}
+  \begin{verbatim}
+
+split L1 L2
+L1: code(e)
+    split L1 L2
+L2: 
+  \end{verbatim}
+  \end{minipage}
+  & \\ \hline
+$e+$ &
+  \begin{minipage}{3cm}
+  \begin{verbatim}
+
+L1: code(e)
+    split L1 L2
+L2: 
+  \end{verbatim}
+  \end{minipage}
+  & Note the way that $e+$ needs one less split instruction than $e*$. \\ \hline
+$e*?$ &
+  \begin{minipage}{3cm}
+  \begin{verbatim}
+
+split L2 L1
+L1: code(e)
+    split L2 L1
+L2: 
+  \end{verbatim}
+  \end{minipage}
+  & This is just like the result of \verb'code(e*)' except that the
+    labels are flipped. \\ \hline
+$e+?$ &
+  \begin{minipage}{3cm}
+  \begin{verbatim}
+
+L1: code(e)
+    split L2 L1
+L2: 
+  \end{verbatim}
+  \end{minipage}
+  & This is just like the result of \verb'code(e+)' except that the
+    labels are flipped. \\ \hline
+$.$ & \verb'char SIGMA' & Here \verb'SIGMA' is $\Sigma$. \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Core Optimizations}
+\label{section:skipscanopt}
+
+This section presents the key contribution of this thesis. If any of
 these optimization patterns can apply, they are applied first, then
 the remainder of the regex is compiled using the ordinary compilation
-path.
+path. This section just covers the most common cases; a discussion of
+how these common cases are extended to deal with minor semantic
+variations can be found in section \ref{section:optextend}.
 
 \subsection{Greedy Dotstar Scan: {\tt code}($.*l$)}
 
 $.*l$ matches anything up to and including the first appearance of $l$.
 The standard code emitted for this pattern involves spawning two
-new threads for every character of input, one to start matching
-the literal and one to loop back and try again on the next character
-of input. In this case the matching thread will keep dying until
-the first occurrence of $l$, at which point the matching thread will
-try to match the rest of the regex, and the loop-back thread will
-continue rolling forward splitting off threads trying to match $l$.
+new threads, $t_1$ and $t_2$, for every character of input.
+$t_1$ tries to start matching the literal terminator, while $t_2$
+accepts any and prepares to spawn another brace of threads.
+$t_1$ will keep dying until the first occurence of $l$,
+at which point it will try to match the rest of the regex.
+$t_2$ will keep rolling forward, splitting off threads that try
+to match $l$, but if $t_1$ or any of its children match
+$t_2$ will never execute due to its lower precedence.
 
 Now consider an alternate compilation strategy, where $.*l$ is compiled
 to:
@@ -690,9 +538,10 @@ L1: scan-end l
 L2: 
 \end{verbatim}
 
-This will first scan to the first occurrence of $l$, and then produce
+This will scan to the first occurrence of $l$, and then produce
 one thread trying to match the rest of the expression and another that
-keeps scanning forward for new occurrences of $l$. The only way to
+keeps scanning forward for new occurrences of $l$. We claim that this
+behaves just as the standard approach does. The only way to
 break out of either loop is to find an instance of $l$ in the input,
 and in both cases the match is continued in just the same way. Thus,
 while saving significant thread spawning overhead and allowing the use
@@ -756,11 +605,17 @@ informs us about when it is valid to apply the trailing $.*$ optimization.
     \Case{$.$}
     \EndCase
   \EndSwitch
+
+  \Comment{Note that while MarkTrailing($e_1 e_2$) marks the outer
+            concatenation expression as trailing, the inner expressions
+            are marked separately so that $e_1$ is not marked as trailing
+            and $e_2$ is.}
 \EndProcedure
 \end{algorithmic}
 \end{algorithm}
 
 \subsection{Literal Terminated Scan: {\tt code}($el$) }
+\label{section:littermscan}
 
 If $L(.*l.*) \cap L(e) = \emptyset$ and $e$ does not contain captures,
 then $l \not\in L(e)$. Thus we know that the first occurrence of $l$
@@ -795,20 +650,27 @@ to compiling a concatenation of expressions given by the definition of
           \State emit CompileConcatOpt($e1 ... e_{j-1}$)
           \State emit \verb'scan' $e_i$
           \State emit code($e_{i+1} ... e_n$)
-          \State {\b Break}
+          \State \textbf{break}
         \EndIf
       \EndFor
-      \State {\b Break}
+      \State \textbf{break}
     \EndIf
   \EndFor
-  \If{There were no literals in $e_1 ... e_n$}
-    emit code($e_1 ... e_n$)
+  \If{there were no literals in $e_1 ... e_n$}
+    \State emit code($e_1 ... e_n$)
+      \Comment{Give up on the optimization.}
   \EndIf
 \EndProcedure
 \end{algorithmic}
 \end{algorithm}
 
+Note that in reality, the logic for the $el$ optimization must be
+interleaved with the logic for the $.*l$ optimization, so the
+real concatenation compiler routine is more complicated. It is
+easier to consider each optimization separately.
+
 \subsection{Skip}
+\label{section:skipopt}
 
 The idea of the skip optimization is to compile a literal, $l$, to
 
@@ -817,7 +679,7 @@ skip len(l)
 \end{verbatim}
 
 The trouble is that this won't work at choice points. To illustrate the
-problem, consider the regex $ac(.). \rvert bc.(.)$ on the input
+problem, consider the regex \verb'/ac(.).|bc.(.)/' on the input
 \verb'bcxy'. This demonstrates a few different problems with just
 compiling literals to skips.
 
@@ -832,7 +694,7 @@ The second issue is that there is no way to make sure that the
 thread from a non-matching branch dies if the input fails to match in
 the middle of a skip. By assumption, we know that the overall regular
 expression matches, but we have no guarantee that any particular branch
-matches. In the case of $ac(.). \rvert bc.(.)$ on \verb'bcxy' the
+matches. In the case of \verb'/ac(.).|bc.(.)/' on \verb'bcxy' the
 first capture group parsed would be \verb'x' rather than \verb'y' as
 it should be. The first thread has higher precedence and would
 fail to die because the skip avoids looking at the \verb'a' char.
@@ -852,15 +714,15 @@ skip n-1
 
 Here \verb'FIRST_SET' is the set of characters which might
 begin the regular expression ($fset(e_{branch})$).
-
 Even this guard is not valid if the first sets of any two
 branches at the branch point intersect. For example it would
-not help deal with $a(.).|a.(.)$. In such cases we have to fall
-back to the default compilation model.
+not help deal with $a(.).|a.(.)$. In such cases we have to 
+give up on the optimization entirely.
 
 \section{Optimization Variants and Extensions}
+\label{section:optextend}
 
-Section \ref{skipscanopt} outlines the most basic and most
+Section \ref{section:skipscanopt} outlines the most basic and most
 important optimizations based off of the \verb'skip' and \verb'scan-end'
 instructions. There is, however, more to the story.
 Real regular expression libraries provide several different repetition
@@ -868,13 +730,11 @@ operators, and the best way to leverage scan instructions to optimize
 repetitions must take into account considerations around capture groups and
 precedence.
 
-While skipping over raw literals, and making sure to avoid
-falling prey to subtle ambiguities is important, we can do better.
-Both \verb'xxx' but not \verb'xxx|yyy' ought to compile down to
-the same \verb'skip 3' instruction. This section will include 
-further skip optimizations which spend more effort analyzing 
-the regular expression to be skipped over to determine a
-statically known length.
+% TODO: skip fusion
+%While skipping over raw literals, and making sure to avoid
+%falling prey to subtle ambiguities is important, we can do better.
+%Both \verb'xxx' and \verb'xxx|yyy' ought to compile down to
+%the same \verb'skip 3' instruction.
 
 \subsection{Scan Variants}
 
@@ -891,8 +751,9 @@ dotstar optimization. At first it might appear that we would be able
 to dispense with the non-determinism for the lazy variant, as laziness
 means that we are after the shortest possible match so we don't
 need to keep looking for future terminators. Unfortunately, there
-might be a match failure in the expression which follows the lazy
-dotstar. More concretely, consider the regular expression $.*?term(?:x)(.)$
+might be a match failure in the expression which follows the
+\verb'.*?'. More concretely, consider the regular expression
+\verb'/.*?term(?:x)(.)/'
 to be executed on \verb'aaaatermbbbbbbtermxy'. The correct solution will
 capture the \verb'y' character, but without a non-deterministic branch
 after the scan the scanning thread will just find the first terminator and
@@ -924,27 +785,39 @@ L1: scan-start l
 L2: 
 \end{verbatim}
 
-\subsubsection{[Capture Terminated] \{Lazy $\rvert$ Greedy\} Dotplus Scan}
+\subsubsection{Dotplus Scan}
 
 All the optimizations for dotstar scanning also apply to dotplus
-patterns ($.+l$).
+patterns (i.e. $.+l$). One might be concerned that the literal scan
+might accidentally find its literal right at the start of the input,
+something which should not be allowed because $.+$ demands at least
+one character of input be consumed before the match can proceed.
+Fortunately, the partial parsing invariant saves us. The input must
+be in the language of the regex we are parsing, so there will always
+be at least one leading character to scan over.
 
-\subsection{Skip Extension}
+\subsection{Skip Extensions}
 
 \subsubsection{Skip Choice: {\tt code}($e1 \rvert \dots \rvert en$)}
 
-Applies iff none of the first sets of $e1 \dots en$ intersect. Note that
-we can't just define this operation as an optimization over a binary
-operator because we need a view of each of the branches.
+Section \ref{section:skipopt} already introduced the idea that
+compiling skips at choice points requires a bit of extra thought.
+This section goes into a more detail about how exactly skips are
+handed in the context of an alternative.
+This optimizations applies iff none of the first sets of $e1 \dots en$
+intersect. If they do intersect, we have to fall back on the standard
+compilation strategy. Note that we can't just define this operation as
+an optimization over a binary operator because we need a view of each
+of the branches.
 
 \begin{verbatim}
 split L1 L2
 L1: branch_code(e1)
     jmp LEND
-L2: split L3 L2ENTER
+L2: split L2ENTER L3
 L2ENTER: branch_code(e2)
          jmp LEND
-L3: split L4 L3ENTER
+L3: split L3ENTER L4
 L3ENTER: branch_code(e3)
          jmp LEND
 ...
@@ -952,17 +825,55 @@ LN: branch_code(en)
 LEND:
 \end{verbatim}
 
-Here branch code behaves just like \verb'code' except that \\
-\verb'branch_code(le) = char fset(l); skip (len(l) - 1); code(e)', \\
-\verb'branch_code(l) = fset(l); skip(len(l) - 1)', \\
-\verb'branch_code(e1 e2) = branch_code(e1); code(e2)', \\
-and \verb'branch_code' is used to recursively compile
-other expressions rather than \verb'code'. This boils
-down to compiling literals as a \verb'char' followed
+Here \verb'branch_code' behaves just like \verb'code' except 
+for the differences outlined in table \ref{table:branchcode}.
+Unless otherwise noted where \verb'code' recursively calls
+itself, \verb'branch_code' recursively calls \emph{itself}
+(the one exception is that tail of a concatenation is
+compiled with the standard \verb'code' function).
+This boils down to compiling literals as a \verb'char' followed
 by a \verb'skip' rather than just a \verb'skip', and
 making sure to do so recursively through the structure
 of the expression.
 
+\begin{table}
+\caption{Differences Between Branch Code and Code}
+This represents a modification to table \ref{table:codedef}.
+\label{table:branchcode}
+\centering
+\begin{tabular}{| l | l |} \hline
+Input Expression & Emitted VM Code \\ \hline
+$l e$ &
+  \begin{minipage}{4cm}
+  \begin{verbatim}
+
+char fset(l)
+skip (len(l) - 1)
+code(e)
+  \end{verbatim}
+  \end{minipage}
+  \\ \hline
+$l$ &
+  \begin{minipage}{4cm}
+  \begin{verbatim}
+
+char fset(l)
+skip (len(l) - 1)
+  \end{verbatim}
+  \end{minipage}
+  \\ \hline
+$e_1 e_2$ &
+  \begin{minipage}{4cm}
+  \begin{verbatim}
+
+branch_code(e1)
+code(e2)
+  \end{verbatim}
+  \end{minipage}
+  \\ \hline
+\end{tabular}
+\end{table}
+ 
 \subsubsection{Greedy Skip Star: {\tt code}($e1*e2$)}
 
 If the first sets of $e1$ and $e2$ don't intersect.
@@ -974,8 +885,8 @@ L1: branch_code(e1)
 L2: branch_code(e2)
 \end{verbatim}
 
-Where \verb'branch_code' is defined in the same way as above.
-The lazy variant just flips the skip operands.
+Where \verb'branch_code' is defined by table \ref{table:branchcode}.
+The lazy variant just flips the split operands.
 
 \subsubsection{Greedy Skip Plus: {\tt code}($e1+e2$)}
 
@@ -987,15 +898,57 @@ L1: branch_code(e1)
 L2: branch_code(e2)
 \end{verbatim}
 
-Where \verb'branch_code' is defined in the same way as above.
-The lazy variant just flips the skip operands as usual.
+Where \verb'branch_code' is defined by table \ref{table:branchcode}.
+The lazy variant just flips the split operands.
 
-\subsubsection{Literal Skip: {\tt code}($s$)}
+\section{Optimization Precedence}
+\label{section:optprecedence}
 
-It is important that this optimization have lower precedence
-than the other skip optimizations. Here \verb's' is an
-expression with a statically known length.
+When an optimization can be applied, it is, but when multiple
+mutually exclusive optimizations can be applied, one must be
+selected. While we have not defined a rigorous cost model
+to do optimization selection, we do have some rules.
+Our goal is to skip or scan over as much input as possible.
+While skipping has the most potential for speedup, we
+believe that scans are more likely to quickly consume large
+chunks of input. Most literals are relatively small, while
+it is quite a bit more common to see \verb'.*' used to eat
+up large chunks of input. The $el$ optimization has the
+potential to scan over the most preceding subexpressions\footnote{
+Keep in mind that $e$ might be a concatenation.},
+so we give it the highest precedence. The trailing \verb'.*' optimization
+can never conflict with another optimization, so we don't have to
+assign it a precedence. All that remains is the order the \verb'.*l'
+optimization and the literal skip optimization. If we gave the
+literal skip optimization a higher precedence, the \verb'.*l'
+optimization would never trigger. Additionally, the \verb'.*l'
+optimization includes skipping over the literal terminator.
+Then there is no reason to place the literal skip optimization
+at a higher precedence. Table \ref{table:optprec} defines these
+precedence levels concisely.
 
-\begin{verbatim}
-scan len(s)
-\end{verbatim}
+\begin{table}
+\caption{Optimization Precedence}
+\label{table:optprec}
+
+\centering
+
+\begin{tabular}{| c | c |} \hline
+Optimization & Precedence Level (lower applies first) \\ \hline
+\verb'el' & 1 \\ \hline
+\verb'.*l' & 2 \\ \hline
+Literal Scan & 3 \\ \hline
+Trailing \verb'.*' & n/a \\ \hline
+\end{tabular}
+\end{table}
+
+% TODO: why?
+% \subsubsection{Fixed Length Skip: {\tt code}($s$)}
+% 
+% It is important that this optimization have lower precedence
+% than the other skip optimizations. Here \verb's' is an
+% expression with a statically known length.
+% 
+% \begin{verbatim}
+% scan len(s)
+% \end{verbatim}

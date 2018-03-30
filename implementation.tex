@@ -2,16 +2,15 @@
 \label{chapter:implementation}
 
 This chapter details our implementation of a regular expression
-engine which leverages skip regex. We implemented skip regex as
-an extension to rust's Regex crate. The decision to extend rather
+engine which leverages skip regex. It pays particular attention
+to the implementation of the abstract VM outlined in section
+\ref{section:vm}. We implemented skip regex as
+an extension to Rust's Regex crate. The decision to extend rather
 than start a fresh project allowed us to reuse the parser,
 testing tools, and even a few implementation techniques. Extending
 an existing library made it even easier to provide backwards
 compatibility with an existing ecosystem. Our implementation
-can be found at \verb'https://github.com/ethanpailes/regex/tree/skip-regex'.
-% TODO: pin to a specific commit or release tag before publication.
-
-%% Talk about use cases??
+can be found at \cite{PailesSkipRegex}.
 
 \section{Architecture}
 
@@ -19,22 +18,21 @@ Executing a skip regular expression requires a number of phases
 arranged in a pipeline. Before any work can be done on the regex,
 it must be parsed. Fortunately, the backwards compatible concrete
 syntax of skip regex means that we could just use the parser provided
-by rust's regex crate. The real work of executing skip regex does not
+by Rust's regex crate. The real work of executing skip regex does not
 pick up until it is time to compile the regular expression.
 
 Skip regex are compiled by applying the \verb'code' function defined
-in the Compilation section. In practice, we make a few adjustments to
-the compilation technique for performance. The biggest such change
+in the section \ref{section:compilation}. In practice, we make a
+few adjustments to the compilation technique for performance.
+The biggest such change
 is to the format of the VM instructions that we execute. Rather than
 using explicit labels, each instruction is annotated with one or
 two \verb'goto' pointers indicating the next instruction to jump to.
 This enables the complete removal of the \verb'jmp' instruction, which
-cuts down on both code size and the number of cycles required to execute
+cuts down on both code size and the number of VM iterations required to execute
 a particular regex. This new format requires continually back-patching
-the last instruction or instructions that were compiled, which is a bit
+the last instruction or instructions during compilation, which is a bit
 less clear than the direct style used to define the \verb'code' function.
-% TODO: reference Compilation section properly when I stitch these
-%       things together
 
 Once a regular expression is compiled, it can be executed by one
 of many potential engines, each with its own set of trade offs.
@@ -75,8 +73,8 @@ case when performing a match. This is useful when searching for
 words embedded in natural language or keywords of a case-insensitive
 language like SQL. Implementing this feature can be performed as
 an AST rewrite pass, where each character is replaced by a character
-class which includes both the character and its capitol version.
-For example \verb'abc' would be rewritten as \verb'[aA][bB][cC]'.
+class which includes both the character and its capital version.
+For example \verb'/abc/' would be rewritten as \verb'/[aA][bB][cC]/'.
 Implementing this flag as an AST transform had a bit of an
 impedance mismatch with the version of the regex crate that we
 forked, but there is no reason it should not work with skip regex.
@@ -114,7 +112,6 @@ ever been in, where a state is identified by the tuple of the
 instruction pointer and the input index. Once the engine has
 been in a particular state once, there is no need to explore it
 again.
-% TODO: cite Russ Cox?
 
 The primary cost associated with the bounded backtracker is
 the initialization of the bitset, which consumes $O(|regex||input|)$
@@ -153,7 +150,8 @@ high level, and there are a number of tricks that we use in the
 real implementation which improve performance at the cost of
 readability. We use an explicit bitset rather than an abstract
 set to implement the seen-set. Rather than using explicit recursion,
-we use a heap-allocated stack of actions representing stack frames.
+we use a heap-allocated stack of actions representing stack frames
+and a direct loop.
 We avoid copying the $captures$ array at every step by modifying
 a single captures array in place and introducing a restoration action
 which can be interleaved with the standard stack resumption action.
@@ -161,15 +159,18 @@ Similarly, the instruction pointer and string pointer are modified
 in place. Algorithm \ref{algo:loopboundedback} implements these
 optimizations. Several of the less interesting instructions are
 omitted for brevity, but it should be easy to see how the implementation
-might be translated form algorithm \ref{algo:recurboundedback}
+of algorithm \ref{algo:loopboundedback}
+might be translated from algorithm \ref{algo:recurboundedback}.
 
 \begin{algorithm}
-\caption{Recursive Bounded Backtracker} \label{algo:recurboundedback}
+\caption{Recursive Bounded Backtracker}
+\label{algo:recurboundedback}
+
 \begin{algorithmic}
 \State Assume the existence of a $scan\_to\_start(needle, haystack)$ function
         which performs fast substring search for the needle in the haystack
-        (using Tuned Boyer-Moore, or hardware accelerated literal search
-        as appropriate).
+        (using Tuned Boyer-Moore (\cite{Hume1991}),
+        or hardware accelerated literal search as appropriate).
 \State Let $input$ be the input string.
 \State Let $insts$ be the instructions.
 \State $seen \gets \{\}$
@@ -234,7 +235,9 @@ might be translated form algorithm \ref{algo:recurboundedback}
 \end{algorithm}
 
 \begin{algorithm}
-\caption{Bounded Backtracker} \label{algo:loopboundedback}
+\caption{Bounded Backtracker}
+\label{algo:loopboundedback}
+
 \begin{algorithmic}
 \State Let $input$ be the input string.
 \State Let $insts$ be the instructions.
@@ -249,6 +252,7 @@ might be translated form algorithm \ref{algo:recurboundedback}
           \State \textbf{break}
         \EndIf
         \State $seen \gets seen \cup \{\langle ip, sp \rangle\}$
+        \State \verb'LOOP:'
         \While{$sp < input.len()$}
           \Switch{$insts[ip]$}
             \Case{{\tt split L1 L2}}
@@ -275,10 +279,10 @@ might be translated form algorithm \ref{algo:recurboundedback}
                 \State $ip \gets ip + 1$
                 \State \textbf{break}
               \Else
-                \State \textbf{return} false
+                \State \textbf{break} \verb'LOOP'
               \EndIf
             \EndCase
-            \Comment{Some cases omitted}
+            \Comment{Some cases omitted.}
           \EndSwitch
         \EndWhile
         \State \textbf{return} false
@@ -299,12 +303,7 @@ While it is usually not as fast as the bounded backtracker,
 a modified version of Rob Pike's lockstep VM (\cite{Pike1987})
 can also be used to execute skip regex. The skip Pike VM cannot
 implement greedy vs lazy match differentiation, so it can't be
-used in situations where this is important. Because of these
-limitations relative to the skip bounded backtracker, we will
-try to keep our discussion of the skip Pike VM brief\footnote{
-Russ Cox provides an in depth discussion of the Pike VM style
-of NFA simulation (\cite{CoxVirtualMachineApproach}).
-}.
+used in situations where this is important.
 
 The core idea of a Pike VM is to maintain two sets of threads:
 one situated at the current character and one at the next character.
@@ -327,13 +326,13 @@ In order to support skip regex, the Pike VM must be able to deal
 with threads in more than two locations. This requires expanding
 the queue of runnable threads beyond a couple of just thread sets.
 It is tempting to place all threads in a priority queue where
-priority is determined by location in the input and precedence,
+priority is determined by location in the input,
 but this approach would cause the running time to become
 $O(|regex||input|lg(|regex||input|))$, as retrieving the highest
 priority thread would become logarithmic in the number of
 of potential runnable threads rather than being constant.
 
-To retain the algorithmic properties demanded by the runqueue,
+To retain the algorithmic properties of the runqueue,
 we instead use a fixed size ring buffer of sparse sets, with
 each set containing threads $n$ characters forward in the input,
 where $n$ is the distance from the current sparse set. This means
@@ -366,8 +365,9 @@ sets are empty, and quickly skip over them.
 
 \begin{figure}
 \caption{Executing a {\tt char} Instruction in the skip Pike VM}
-\centering
 \label{fig:pikeexecchar}
+
+\centering
 
 \begin{tabular}{ l l }
 \textbf{Instructions} &
@@ -377,7 +377,7 @@ sets are empty, and quickly skip over them.
   0 & \verb'save 0' \\ \hline
   1 & \verb'char a' \\ \hline
   2 & \verb'save 1' \\ \hline
-  2 & \verb'match' \\ \hline
+  3 & \verb'match' \\ \hline
   \end{tabular} \\ \\
 \textbf{Step 0, Thread Set Index = 0} &
   \begin{tabular}{| c | c | c | c |}
@@ -411,8 +411,9 @@ sets are empty, and quickly skip over them.
 
 \begin{figure}
 \caption{Executing a {\tt skip} Instruction in the skip Pike VM}
-\centering
 \label{fig:pikeexecskip}
+
+\centering
 
 \begin{tabular}{ l l }
 \textbf{Instructions} &
@@ -422,7 +423,7 @@ sets are empty, and quickly skip over them.
   0 & \verb'save 0' \\ \hline
   1 & \verb'skip 3' \\ \hline
   2 & \verb'save 1' \\ \hline
-  2 & \verb'match' \\ \hline
+  3 & \verb'match' \\ \hline
   \end{tabular} \\ \\
 \textbf{Step 0, Thread Set Index = 0} &
   \begin{tabular}{| c | c | c | c |}

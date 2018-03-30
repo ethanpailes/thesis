@@ -63,10 +63,10 @@ overcome this issue Cox wrote RE2, a library
 which focuses on reclaiming guaranteed linear time execution (\cite{CoxRE2}).
 Like Perl before it, RE2 inspired other regex engines to
 follow its design philosophy, the most prominent of which are
-rust's regex library (\cite{GallantRegex}) and go's regex library
+Rust's regex library (\cite{GallantRegex}) and go's regex library
 (\cite{GoLang}).
 
-\section{Related Work}
+\section{Current Research}
 
 While capture groups were often part of regex implementations,
 they were not a main focus of study until Ville Laurikari laid
@@ -113,20 +113,21 @@ literature, providing a clean taxonomy of sub-string search algorithms
 and a recommendation to use a variant called Tuned Boyer-Moore
 (\cite{Hume1991}). This is not, however, the end of the story.
 When we implemented Tuned Boyer-Moore, we found that it was seldom
-able to beat the simpler approach based on frequency analysis and
+able to beat a simpler approach based on frequency analysis and
 the \verb'memchr' function already found in the \verb'regex' crate
 (\cite{GallantRegex}). On Intel machines this difference boils down
 to the use of the \verb'pcmpeqb' instruction, which allows multiple
 bytes to be checked at once (\cite{IntelInstructionManual}); other
 platforms have their own hardware acceleration for sub-string search. 
+
 While not quite as fast as pure sub-string search, the multiple
 sub-string search problem can also be decided quite a bit faster than
 full regex matching. In particular the Aho-Corasick algorithm provides
 fast multiple sub-string search (\cite{Aho1975}). Just like Boyer-Moore,
 Aho-Corasick looses out to a hardware accelerated variant despite it's
 theoretical elegance. The accelerated algorithm, called Teddy, seems
-to have first appeared in the extremely sophisticated
-hyperscan regex library (\cite{hyperscan}), and was reverse-engineered
+to have first appeared in the hyperscan regex library (\cite{hyperscan}),
+and was reverse-engineered
 and illuminated in the Teddy library (\cite{Teddy}). The most important
 take-away of all of this is that sub-string and multiple sub-string
 search are quite a bit faster than full regular expression matching.
@@ -140,10 +141,14 @@ states as input and is ultimately responsible for constructing
 the capture groups. Compilation is quite expensive, potentially
 going exponential and requiring the construction of four separate
 automata (two of which are intermediate automata that are quickly
-thrown out). Being a DFA approach, the algorithm also suffers from
-a potentially exponential blowup in the size of the DFA, but this
-situation seldom arises. The ability to compute capture groups with
-just DFAs represents a significant advance in the state of the art.
+thrown out). Being a DFA approach, the algorithm suffers from
+a potentially exponential blowup in the size of the DFA just as
+the subset construction does, but this situation seldom arises.
+Unfortunately, due to the extreme compile time cost of this
+approach, it seems unlikely that the exponential blowup can be
+remedied by lazy compilation as is typically done for the subset
+construction. The ability to compute capture groups with
+just DFAs represents a significant advancement in the state of the art.
 
 Chivers provides a series of optimizations over standard NFA simulation
 approaches based on the notion of a regular expression preview
@@ -158,7 +163,9 @@ a quick way to fail fast before committing to a non-deterministic
 branch, and a good way to find candidate locations to attempt a
 full parse. In this way, previews bear a lot of similarities to the
 scan optimizations presented in this thesis. In fact, previews can be
-viewed as a generalization of literal scanning.
+viewed as a generalization of literal scanning. They are completely
+compatible, and indeed complimentary with the work presented in this
+thesis.
 
 % TODO: Briggs (An Efficient Representation of Sparse Sets)
 

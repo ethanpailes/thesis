@@ -10,5 +10,6 @@ thesis.pdf
 *.lot
 *.toc
 *.swp
+*.out
 
 resources

@@ -49,6 +49,9 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows,automata}
 
+\usepackage{hyperref}
+\hypersetup{backref, colorlinks=true}
+
 % Add switch support to algpseudocode
 \algnewcommand\algorithmicswitch{\textbf{switch}}
 \algnewcommand\algorithmiccase{\textbf{case}}
@@ -64,7 +67,7 @@
 \mastersthesis                     %% Uncomment one of these; if you don't
 % \phdthesis                         %% use either, the default is \phdthesis.
 
-\thesisdraft                       %% Uncomment this if you want a draft
+% \thesisdraft                       %% Uncomment this if you want a draft
                                      %% version; this will print a timestamp
                                      %% on each page of your thesis.
 
@@ -223,6 +226,7 @@ Acton, MA 01720}
 \listoffigures                     %% Uncomment this to generate list
                                    %% of figures.
 \include{introduction}             
+\include{abstract-vm}
 \include{compilation}
 \include{implementation}
 \include{related-work}

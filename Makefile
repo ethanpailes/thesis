@@ -12,9 +12,6 @@ clean:
 	rm -f *.dvi
 	rm -f *.log
 	rm -f *.blg
-	$(MAKE) -C chapter2 clean
-	$(MAKE) -C chapter3 clean
-	$(MAKE) -C chapter4 clean
 
 watch:
 	watchexec --exts tex,bib make

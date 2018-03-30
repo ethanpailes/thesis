@@ -6,7 +6,7 @@ regex and there must be ample opportunity to apply them. To evaluate
 the degree to which skip regex meet these goals, we perform a number
 of experiments.  We present a series of micro benchmarks to demonstrate
 the performance of skip regex under specific conditions. The micro
-benchmarks show that the performance of skip regex is always
+benchmarks show that the performance of skip regex is
 at least as good as the equivalent standard regex execution, and 
 is often significantly better. To determine the usefulness of skip
 regex for regular expressions found in the wild, we scraped
@@ -25,7 +25,6 @@ way, microbenchmarks are excellent tools for performance story
 telling. Sometimes such story telling can be used to deceive,
 but we will attempt to avoid any deception and instead focus
 on the performance trade-offs of skip regex.
-% TODO: this is awkward. rewrite.
 
 % TODO: explain methodology.
 The micro benchmarks we present in this section each consist of
@@ -38,17 +37,21 @@ number of different scaling factors using Rust's built in
 benchmarking facility, which takes a number of samples before
 reporting the average runtime plus the spread between the minimum
 and maximum runtime. We indicate the spread by attaching error bars to
-each datapoint in our scatter plot.
+each datapoint in our scatter plots.
 
 In order to demonstrate the utility of different optimizations,
 we execute the benchmarks with different engines and different
 optimizations enabled. The standard regex engines are called
-\verb'baseline-backtrack' and \verb'baseline-pike', while the
-skip backends are called \verb'skip-backtrack' and \verb'skip-pike',
+\texttt{baseline\allowbreak -\allowbreak backtrack} and
+\texttt{baseline\allowbreak -\allowbreak pike}, while the
+skip backends are called \texttt{skip\allowbreak -\allowbreak backtrack}
+and \texttt{skip\allowbreak -\allowbreak pike},
 with a number of optimization specifiers tacked onto the end to
-indicate which optimizations have been implemented. For example,
-\verb'skip-backtrack-ds-es-sl' indicates that the skip backtracker
-with $.*$ scanning, $e*$ scanning, and literal skipping enabled.
+indicate which optimizations have been enabled. For example,
+\texttt{skip\allowbreak -\allowbreak backtrack\allowbreak -\allowbreak
+        ds\allowbreak -\allowbreak es\allowbreak -\allowbreak sl}
+indicates that the skip backtracker with $.*$ scanning, $e*$ scanning,
+and literal skipping enabled.
 
 % TODO: open up a documentation PR so that other people don't
 %       have to go digging through rustc source to figure out
@@ -76,6 +79,7 @@ backtracker with literal skipping disabled matches the
 \begin{figure}
 \label{fig:a:big:skip}
 \caption{A Big Skip}
+
 \includegraphics{resources/a-big-skip.png}
 \end{figure}
 
@@ -94,8 +98,9 @@ in the size of the input, but the constant factor for the skip engines
 is so much lower that they appear nearly constant time.
 
 \begin{figure}
-\label{fig:leading:dotstar}
 \caption{Leading $.*$}
+\label{fig:leading:dotstar}
+
 \includegraphics{resources/leading-dotstar.png}
 \end{figure}
 
@@ -120,8 +125,9 @@ case for the $.*$ scan optimization, but it seems less likely to appear
 in the wild than the best case.
 
 \begin{figure}
-\label{fig:dotstar:bounce}
 \caption{$.*$ Bounce}
+\label{fig:dotstar:bounce}
+
 \includegraphics{resources/dotstar-bounce.png}
 \end{figure}
 
@@ -138,8 +144,9 @@ experiment, all engines are linear, but the skip backends are so much
 faster that they appear almost constant time.
 
 \begin{figure}
-\label{fig:leading:noncontaining:estar}
 \caption{Leading $e*$}
+\label{fig:leading:noncontaining:estar}
+
 \includegraphics{resources/leading-noncontaining-estar.png}
 \end{figure}
 
@@ -169,8 +176,9 @@ to be generic over both unicode and byte-oriented input, which
 may come at a cost.}.
 
 \begin{figure}
-\label{fig:justtwo:branch}
 \caption{No Opt}
+\label{fig:justtwo:branch}
+
 \includegraphics{resources/justtwo-branch.png}
 \end{figure}
 
@@ -185,7 +193,8 @@ common use cases for regular expressions. We present an example
 walking through the use of skip regex in pre-validated mode
 to scrape an Apache Kafka debug log file. This case study
 demonstrates the utility of skip regex beyond the library context
-illuminated by the \verb'crates.io' figures.
+illuminated by the \verb'crates.io' figures presented in section
+\ref{section:applicability}.
 
 \subsection{Experimental Setup}
 
@@ -201,9 +210,7 @@ to our scraping script. To make the input log large enough
 to observe a difference in performance, we concatenated the
 log to itself several times.
 
-% TODO: reference specific commit.
-The code for our program can be found at
-\verb'https://github.com/ethanpailes/skip-regex-case-study',
+The code for our program can be found at \cite{PailesSkipRegexCaseStudy},
 but its usage message is worth including here to make
 interpreting the invocations we used for our experiments
 easier.
@@ -230,8 +237,8 @@ as well as the total number of append events and the total
 number of bytes written. We used the regex
 \verb'^.* with first offset: ([0-9]+).*value=([0-9]+).*$'
 to extract the offset and the total number of bytes from append
-lines. When we executed our program in both standard mode
-and skip mode we got the following output.
+log lines. When we executed our program in first standard mode
+then skip mode we got the following output.
 
 \begin{verbatim}
 scrape$ du -h server.log
@@ -292,7 +299,8 @@ approach.
 
 Kafka has a number of named tasks that can be used to track
 the behavior of the server. In order to extract the names
-of these events we used the regex \verb|^.* scheduled task '(.+?)'.*$|.
+of these events we used the regex 
+\texttt{/.* \allowbreak scheduled \allowbreak task \allowbreak '(.+?)'.*\$/}
 To find out which events happened most frequently, we built
 a histogram and then printed out a summary of the ten most
 common events. We ran our scraping script first with the standard regex
@@ -340,6 +348,7 @@ A quarter of the log lines were about named events, so the speedup
 from using skip regex was much more noticeable for this case.
 
 \section{Applicability}
+\label{section:applicability}
 
 It is hard to evaluate the applicability of the optimizations presented
 in this thesis. It is quite easy to invent scenarios where each
@@ -363,7 +372,7 @@ crates on \verb'crates.io' which depend on the regex crate, and
 searched their source code for occurrences of the pattern
 \verb'Regex::new\((r?".*")\)'. This only collected a subset of
 the regex that could possibly be found, as there are ways to
-produce a rust regex without calling \verb'Regex::new', but
+produce a Rust regex without calling \verb'Regex::new', but
 other methods of construction are unusual.
 
 Once we had collected
@@ -383,17 +392,26 @@ are relatively short.
 It is worth taking these numbers with a grain of salt. \verb'crates.io'
 is very library heavy, which likely biases the dataset towards
 more complex and tricky regex. The more complex a regex gets,
-the more opportunity for first set collisions there are. The sorts
+the more opportunity for first set collisions there are, which gets
+in the way of optimization. The sorts
 of regex used to scrape log files or extract data in a unix pipeline
 are more likely to have a linear feel than the regex found in
 libraries. As an example, the regex we used to convert the output
-of \verb'cargo bench', Rust's benchmarking utility, to a machine
+of \texttt{cargo \allowbreak bench}, Rust's benchmarking utility, to a machine
 readable CSV format was
-\verb'/test ([a-zA-Z:_]+) +... bench: +([0-9,]+) ns/iter \(\+/\- ([0-9,]+)\).*$/'.
+\texttt{/test \allowbreak([a-zA-Z:\_]+) \allowbreak +... bench\allowbreak
+      : \allowbreak+([0-9,]+) \allowbreak ns/iter \textbackslash
+      (\textbackslash+/\textbackslash- \allowbreak
+      ([0-9,]+)\textbackslash).*\$/}
 This regex contains multiple different opportunities for skip optimizations,
 but is not really general enough to put in a library. Contrast this
-with the regex \\
- \verb'/([0-9a-zA-Z]{1}[0-9a-zA-Z]{1}[:]{1}){5}[0-9a-zA-Z]{1}[0-9a-zA-Z]{1}/'
+with the regex
+\texttt{
+/([0-9a-zA-Z]\allowbreak\{1\}\allowbreak/\allowbreak
+[0-9a-zA-Z]\{1\}\allowbreak[:]\allowbreak\{1\})
+\{5\}\allowbreak[0-9a-zA-Z]\allowbreak{1}\allowbreak[0-9a-zA-Z]
+\allowbreak\{1\}/
+}
 found in the \verb'wifiscanner' crate, which does not allow for
 optimization. It is possible for a one-off data munging script to include
 such a complex regex, and for a library to include a simple one, but
