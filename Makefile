@@ -12,6 +12,7 @@ clean:
 	rm -f *.dvi
 	rm -f *.log
 	rm -f *.blg
+	rm -f *.toc
 
 watch:
 	watchexec --exts tex,bib make
