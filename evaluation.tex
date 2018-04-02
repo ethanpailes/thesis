@@ -4,19 +4,28 @@
 In order to be worthwhile, skip regex must be faster than standard
 regex and there must be ample opportunity to apply them. To evaluate
 the degree to which skip regex meet these goals, we perform a number
-of experiments.  We present a series of micro benchmarks to demonstrate
+of experiments. In section \ref{section:microbenchmarks}, we present a
+series of micro benchmarks to demonstrate
 the performance of skip regex under specific conditions. The micro
 benchmarks show that the performance of skip regex is
 at least as good as the equivalent standard regex execution, and 
-is often significantly better. To determine the usefulness of skip
-regex for regular expressions found in the wild, we scraped
-\verb'crates.io', the Rust package repository,
-for regular expressions and tested to see how applicable each of the 
-optimizations we perform are. Finally, we perform a case study walking
+is often significantly better.
+In section \ref{section:logparsingcase} we perform a case study walking
 through the steps a programmer might take while parsing logs from
 an Apache Kafka instance.
+In section \ref{section:applicability} we focus on the usefulness of
+skip regex for regular expressions found in the wild. We scraped
+\verb'crates.io', the Rust package repository,
+for regular expressions and tested to see how applicable each of the 
+optimizations we perform are. 
 
-\section{Microbenchmarks}
+All benchmarks were run
+on the same 5 year old Lenovo Y500 with a 4 core
+Intel\textregistered Core\textsuperscript{TM} i7-3630QM CPU @
+2.40GHz and 8 GiB of RAM.
+
+\section{Micro Benchmarks}
+\label{section:microbenchmarks}
 
 Microbenchmarks alone are not typically enough to develop a high
 level understanding of application performance, yet they remain
@@ -26,7 +35,6 @@ telling. Sometimes such story telling can be used to deceive,
 but we will attempt to avoid any deception and instead focus
 on the performance trade-offs of skip regex.
 
-% TODO: explain methodology.
 The micro benchmarks we present in this section each consist of
 a regex template and an input template which get instantiated
 based off of some scaling factor and then run with different
@@ -49,9 +57,23 @@ and \texttt{skip\allowbreak -\allowbreak pike},
 with a number of optimization specifiers tacked onto the end to
 indicate which optimizations have been enabled. For example,
 \texttt{skip\allowbreak -\allowbreak backtrack\allowbreak -\allowbreak
-        ds\allowbreak -\allowbreak es\allowbreak -\allowbreak sl}
-indicates that the skip backtracker with $.*$ scanning, $e*$ scanning,
-and literal skipping enabled.
+        ds\allowbreak -\allowbreak es}
+indicates that the skip backtracker with $.*$ scanning and $e*$ scanning
+enabled. When all optimizations are enabled we shorten this to
+\texttt{skip\allowbreak -\allowbreak backtracker\allowbreak -\allowbreak
+all}.
+
+Figure \ref{fig:8000:all} provides a comparison between all the
+different benchmarks at a scaling factor of 8000.
+
+\begin{figure}
+\caption{Benchmarks at Scaling Factor 8000}
+\label{fig:8000:all}
+
+\makebox[\textwidth]{
+    \includegraphics[width=\paperwidth]{resources/8000-bar.png}
+}
+\end{figure}
 
 % TODO: open up a documentation PR so that other people don't
 %       have to go digging through rustc source to figure out
@@ -73,12 +95,12 @@ of the skip engines remaining virtually flat as the running
 time of the standard backtracker grows linearly with the scaling factor.
 The performance improvement is entirely due to the literal skip
 optimization, as shown by the fact that the performance of the skip
-backtracker with literal skipping disabled matches the
-\verb'baseline-backtrack' configuration.
+backtracker with literal skipping disabled is closer to the performance
+of the \verb'baseline-backtrack' configuration.
 
 \begin{figure}
-\label{fig:a:big:skip}
 \caption{A Big Skip}
+\label{fig:a:big:skip}
 
 \includegraphics{resources/a-big-skip.png}
 \end{figure}
@@ -133,13 +155,14 @@ in the wild than the best case.
 
 \subsection{Leading $e*$ scan}
 
-The other scan optimization only really has a best case, because
+The $e*$ scan optimization only really has a best case, because
 the scan is always guaranteed to find the literal terminator. The
 effectiveness of the optimization is entirely determined by the
 size of the input, something which can be completely described
 by one experiment. We produced figure \ref{fig:leading:noncontaining:estar}
 by executing the regex \verb'a*foo(bar)' on \verb'afoobar' with \verb'a'
-repeated according to the scaling factor. Just as in the ``Leading $.*$''
+repeated according to the scaling factor. 
+Just as in the ``Leading $.*$''
 experiment, all engines are linear, but the skip backends are so much
 faster that they appear almost constant time.
 
@@ -148,6 +171,25 @@ faster that they appear almost constant time.
 \label{fig:leading:noncontaining:estar}
 
 \includegraphics{resources/leading-noncontaining-estar.png}
+\end{figure}
+
+\subsection{Trailing $.*$}
+
+When an expression contains a trailing $.*$ it can be compiled
+directly to a \verb'goto-end' instruction. To showcase the
+performance impact of this optimization we executed the
+regex \verb'(a+).*' on \verb'ab' with \verb'a' and \verb'b'
+repeated according to the scaling factor. Figure
+\ref{fig:aplus:trailing} shows the results. Both the standard
+and skip engines have to process the first half of the input
+by spawning new threads, but the skip engine is always able
+to skip the second half. This results in a noticeable speedup.
+
+\begin{figure}
+\caption{Trailing $.*$}
+\label{fig:aplus:trailing}
+
+\includegraphics{resources/aplus-trailing.png}
 \end{figure}
 
 \subsection{No Opt}
@@ -167,13 +209,8 @@ the different engines, most notably between the Pike VMs and the
 bactrackers, as backtrackers are generally faster. The skip Pike VM
 has a higher constant factor than the standard Pike VM when optimizations
 are not helping out because of the increased complexity of its runnable
-thread queue. The skip backtracker seems to have a slightly better
-constant factor than the standard backtracker for this benchmark.
-This difference may come from some slight overhead associated with
-unicode support\footnote{Unicode support is turned off for the
-standard backtracker in this benchmark, but the code is written
-to be generic over both unicode and byte-oriented input, which
-may come at a cost.}.
+thread queue. There is a slight difference in constant factor between
+the skip backtracker and the standard backtracker, but it is negligible.
 
 \begin{figure}
 \caption{No Opt}
@@ -183,11 +220,12 @@ may come at a cost.}.
 \end{figure}
 
 \section{Log Parsing: A Case Study}
+\label{section:logparsingcase}
 
 Regular expressions can be used in core application code, but they
 are quite frequently used in a more improvisational capacity.
 Searching through source code in an editor, filtering and parsing
-the output of a previous command in a unix pipeline, and aiding
+the output of a previous command in a unix pipeline, or aiding
 the construction of quick one-off scripts are all examples of
 common use cases for regular expressions. We present an example
 walking through the use of skip regex in pre-validated mode
@@ -195,6 +233,12 @@ to scrape an Apache Kafka debug log file. This case study
 demonstrates the utility of skip regex beyond the library context
 illuminated by the \verb'crates.io' figures presented in section
 \ref{section:applicability}.
+
+We present this case study as a partial literate program,
+including just the most interesting kernel from the actual
+program that we wrote. The full code for our scraping program
+and the scripts used to generate test data can be found at
+\cite{PailesSkipRegexCaseStudy}.
 
 \subsection{Experimental Setup}
 
@@ -207,152 +251,255 @@ Kafka to log as promiscuously as possible and used a simple
 python script to repeatedly publish and consume from a 
 \verb'test' topic. We used the resultant log file as input
 to our scraping script. To make the input log large enough
-to observe a difference in performance, we concatenated the
-log to itself several times.
+to observe a difference in performance measured in tenths of
+a second, we concatenated the log to itself several times.
 
-The code for our program can be found at \cite{PailesSkipRegexCaseStudy},
-but its usage message is worth including here to make
-interpreting the invocations we used for our experiments
-easier.
-
-\begin{verbatim}
-Usage: scrape [options] <log-file>
-       scrape -h
-
-Options:
-    -v, --validate  First filter with a DFA, then apply skip regex.
-    -a, --append    Summarize the append events.
-    -n, --named     Summarize the named events.
-    -h, --help      Print this help message.
-\end{verbatim}
+To collect and plot results we ran each benchmark 100
+times, and used the unix \verb'time' tool to extract
+the amount of user time that the program spent on each
+run. We present the results in a series of box and whisker
+diagrams. The boxes indicate the upper and lower quartiles
+of the data.
 
 \subsection{Summarizing Append Events}
 
-When a new message is appended to a Kafka log it notes some
+When a new message is appended to a Kafka queue it notes some
 metadata about the message such as its size and the offset to
-which it was written in the partition. To get a summary of
-the append events that occurred in a particular log we 
-determine the minimum and maximum offsets appended to,
-as well as the total number of append events and the total
-number of bytes written. We used the regex
-\verb'^.* with first offset: ([0-9]+).*value=([0-9]+).*$'
-to extract the offset and the total number of bytes from append
-log lines. When we executed our program in first standard mode
-then skip mode we got the following output.
+which it was written in the partition. An example of such a log
+line can be found in figure \ref{fig:appendevent}. To extract
+the offset and number of bytes written from such lines we
+used a regex defined as
 
 \begin{verbatim}
-scrape$ du -h server.log
-25M     server.log
-scrape$ time ./target/release/scrape -a server.log 
-3900/111098 (3.51%) append events
-1000 min offset
-1299 max offset
-58110 total bytes written
-
-real    0m0.128s
-user    0m0.117s
-sys     0m0.012s
-scrape$ time ./target/release/scrape -a -v server.log 
-3900/111098 (3.51%) append events
-1000 min offset
-1299 max offset
-58110 total bytes written
-
-real    0m0.097s
-user    0m0.091s
-sys     0m0.006s
+let append_line = r"^.* with first offset: ([0-9]+).*value=([0-9]+).*$";
+let append_re = regex!(append_line, args.flag_validate);
 \end{verbatim}
 
-Note that because only 3.51\% of lines matched, most of the time
-was spent in the DFA discarding non-matching lines in both cases.
-The \verb'0.026' second difference in user time then comes from
-the 3900 matching lines. When we stripped away the non-matching
-lines to more directly observe the difference in performance
-of the two NFA simulations we got the following results.
+\verb'append_line' is a Rust raw string containing the regex we
+plan to use, and \verb'append_re' is a compiled regex object ready for
+execution. \verb'regex!' is a previously defined Rust macro which
+constructs a regex from its first argument, using the standard engine
+if the second argument is false and a skip based engine in validation
+mode if the second argument is true. Our program accepts a command
+line flag indicating which sort of backend it should use in order
+to facilitate comparison.
+
+Once we have constructed our regex we can iterate over our input
+file and extract statistics from each line.
 
 \begin{verbatim}
-scrape$ cat server.log | rg "with first offset:" > appends.log 
-scrape$ du -h appends.log 
-848K    appends.log
-scrape$ time ./target/release/scrape -a server.log 
-3900/111098 (3.51%) append events
-1000 min offset
-1299 max offset
-58110 total bytes written
-
-real    0m0.129s
-user    0m0.120s
-sys     0m0.009s
-scrape$ time ./target/release/scrape -v server.log 
-
-real    0m0.029s
-user    0m0.022s
-sys     0m0.007s
+let file = File::open(&args.arg_log_file).expect("cannot open log file");
+let file = BufReader::new(file);
+for line in file.lines().filter_map(|result| result.ok()) {
+    stats.no_lines += 1;
+    if args.flag_append {
+        scrape_append(&append_re, line.as_bytes(), &mut stats);
+    }
+} 
 \end{verbatim}
 
-This shows that there is significant difference in the performance
-of the NFA simulations, and highlights the value of using the DFA
-to filter out non-matching lines even for a standard NFA simulation
-approach.
+The first few lines are just a standard Rust song and dance to
+iterate over the lines of a file, buffering the input and filtering
+out any errors. We guard scrapping append data with a flag to allow
+us to study its performance in isolation or along with other
+scraping tasks. \verb'stats' is a struct containing the summary
+statistics we have collected so far about the log file. By far
+the most interesting thing going on in this block of code is
+the fact that \verb'scrape_append' has no way of knowing which
+sort of regex engine is using. When used in validation mode,
+skip regex can be used for all the same things that standard
+regex can be used for.
 
-\subsection{Counting Named Events}
-
-Kafka has a number of named tasks that can be used to track
-the behavior of the server. In order to extract the names
-of these events we used the regex 
-\texttt{/.* \allowbreak scheduled \allowbreak task \allowbreak '(.+?)'.*\$/}
-To find out which events happened most frequently, we built
-a histogram and then printed out a summary of the ten most
-common events. We ran our scraping script first with the standard regex
-backend, and then with our skip regex backend in validation
-mode. This produced the following output.
+\verb'scrape_append' keeps track of the min and max log
+indices we we have seen appended to so far, the total
+number of bytes written, and the total number of appends.
+It is defined as
 
 \begin{verbatim}
-scrape$ du -h server.log 
-25M     server.log
-scrape$ time ./target/release/scrape -n server.log 
-28262/111098 (25.44%) named events
-event isr-change-propagation happened 12844 times.
-event isr-expiration happened 6422 times.
-event highwatermark-checkpoint happened 6422 times.
-event kafka-recovery-point-checkpoint happened 546 times.
-event kafka-log-start-offset-checkpoint happened 546 times.
-event kafka-delete-logs happened 546 times.
-event transaction-abort happened 520 times.
-event kafka-log-retention happened 130 times.
-event auto-leader-rebalance-task happened 130 times.
-event delete-expired-group-metadata happened 78 times.
+fn scrape_append<'a>(re: &Regex, line: &'a [u8], stats: &mut Stats) {
+    match re.captures(line) {
+        Some(caps) => {
+            stats.appends += 1;
+            let off = String::from_utf8_lossy(&caps[1])
+                            .parse::<usize>().unwrap();
+            stats.max_append_offset =
+                cmp::max(stats.max_append_offset, off);
+            stats.min_append_offset =
+                cmp::min(stats.min_append_offset, off);
 
-real    0m0.225s
-user    0m0.220s
-sys     0m0.004s
-scrape$ time ./target/release/scrape -n -v server.log 
-28262/111098 (25.44%) named events
-event isr-change-propagation happened 12844 times.
-event isr-expiration happened 6422 times.
-event highwatermark-checkpoint happened 6422 times.
-event kafka-recovery-point-checkpoint happened 546 times.
-event kafka-log-start-offset-checkpoint happened 546 times.
-event kafka-delete-logs happened 546 times.
-event transaction-abort happened 520 times.
-event kafka-log-retention happened 130 times.
-event auto-leader-rebalance-task happened 130 times.
-event delete-expired-group-metadata happened 78 times.
-
-real    0m0.122s
-user    0m0.115s
-sys     0m0.007s
+            let nbytes = String::from_utf8_lossy(&caps[2])
+                            .parse::<usize>().unwrap();
+            stats.total_bytes_written += nbytes;
+        }
+        None => (),
+    }
+}
 \end{verbatim}
 
-A quarter of the log lines were about named events, so the speedup
-from using skip regex was much more noticeable for this case.
+\verb'scrape_append' asks for the capture groups of the regex,
+then updates all the relevant statistics if a match occurs.
+
+\begin{figure}
+\caption{Example Append Event Log Line}
+\label{fig:appendevent}
+
+\texttt{[2018-02-15 11:39:30,073] \allowbreak TRACE Appended \allowbreak
+message set \allowbreak to log \allowbreak test-0 with \allowbreak
+first offset: \allowbreak 1000, next offset: \allowbreak 1001, and
+messages: [(record=\allowbreak DefaultRecord(\allowbreak
+offset=1000, \allowbreak timestamp=-1, \allowbreak key=0 bytes,
+ value=14 \allowbreak bytes))] \allowbreak(kafka.log.Log)
+}
+\end{figure}
+
+\paragraph{Results}
+
+Running our scraping script on a 25M log file showed a
+respectable speedup for skip regex (figure \ref{fig:append}).
+Our script reported that only 3.51\% of lines matched, so
+most of the time was spent in the DFA discarding non-matching
+lines in both cases. The 26.03\% difference in user
+time then comes from the 3900 matching lines. We stripped
+away the non-matching lines with grep to more directly observe
+the difference in performance of the two NFA simulations we got
+the shown in figure \ref{fig:append:just:match}.
+When the NFAs triggers every time the difference in performance
+is even more pronounced, demonstrating that the difference in performace
+must be in the NFA simulation. The NFA simulation is the slowest part of
+the system, so Amdahl's Law tells us that improvements to it ought to have
+a disproportionately positive impact on overall runtime (\cite{Amdahl1967}).
+This example confirms that intuition by showing that even when only a small
+subset of the input lines match, NFA performance really matters.
+
+\begin{figure}
+\caption{Parsing A 25M Kafka Log for Append Events}
+\label{fig:append}
+
+\includegraphics{resources/append.png}
+\end{figure}
+
+\begin{figure}
+\caption{Parsing 848K of Append Events}
+\label{fig:append:just:match}
+
+\includegraphics{resources/append-just-match.png}
+\end{figure}
+
+
+
+
+\subsection{Counting Scheduled Tasks}
+
+Kafka has a number of scheduled tasks that can be used to track
+the behavior of the server. Whenever one of these named
+tasks happens, Kafka logs it with a line like the one
+found in figure \ref{fig:namedevent}. We wanted to find out which
+events were the most common, and how many in total there were.
+To do this we needed to extract the event names using the
+regex
+
+\begin{verbatim}
+let named_line = r".* scheduled task '(.+?)'.*";
+let named_re = regex!(named_line, args.flag_validate);
+\end{verbatim}
+
+this declaration follows the same pattern used above, so we
+won't go over it again. To collect statistics about scheduled
+tasks, we just added
+
+\begin{verbatim}
+if args.flag_named {
+    scrape_named(&named_re, line.as_bytes(), &mut stats);
+}
+\end{verbatim}
+
+to the body of the loop shown above. \verb'scrape_named'
+is defined as
+
+\begin{verbatim}
+fn scrape_named(re: &Regex, line: &[u8], stats: &mut Stats) {
+    match re.captures(line) {
+        Some(caps) => {
+            stats.named_events += 1;
+            *stats.named_hist
+                .entry(String::from_utf8_lossy(&caps[1]).to_string())
+                .or_insert(0) += 1;
+        }
+        None => (),
+    }
+}
+\end{verbatim}
+
+just like \verb'scrape_append', \verb'scrape_named'
+tracks the total number of matching lines. \verb'stats.named_hist'
+is a \verb'HashMap' that we use to build a histogram tracking the
+total number of times that each event has shown up. Once we have
+processed all of the input we determine and report the 10 most common
+events with
+
+\begin{verbatim}
+let mut hist = stats.named_hist.drain()
+    .map(|(e, n)| (n, e)).collect::<Vec<_>>();
+hist.sort_by(|lhs, rhs| rhs.cmp(lhs));
+let v = hist.iter().take(10).collect::<Vec<_>>();
+for &(ref n, ref e) in v.into_iter() {
+    println!("event {} happened {} times.", e, n);
+}
+\end{verbatim}
+
+this is a bit more work than we had to do to summarize the append
+events. It might seem like this extra work should make the impact
+of regex performance matter less, but our results show that
+skip regex are still able to make significant improvements.
+It is interesting to note just how much time is actually spent
+on parsing during simple data munging tasks such as this one.
+
+\begin{figure}
+\caption{A Named Event Log Line}
+\label{fig:namedevent}
+
+\texttt{[2018-02-15 \allowbreak 11:39:25,728] \allowbreak TRACE \allowbreak
+Beginning execution \allowbreak of scheduled \allowbreak
+task 'isr-expiration'\allowbreak . \allowbreak(kafka.utils.\allowbreak
+KafkaScheduler)
+}
+\end{figure}
+
+% TODO: tense agreement
+
+\paragraph{Results}
+
+Figure \ref{fig:named} shows a nearly 50\% speedup for skip regex.
+At the megabyte scale, the difference between 2 and 1 tenth of
+a second is not that noticeable, but when log files start running
+into the gigabyte range, as can easily happen for long running
+networked systems like Kafka, it is a serious quality of life
+improvement.
+
+Figure \ref{fig:append:named} shows how our scraping script
+performed when we ran both set of analysis at once. Again,
+skip regex provide solid an improvement.
+
+\begin{figure}
+\caption{Parsing A 25M Kafka Log for Scheduled Tasks}
+\label{fig:named}
+
+\includegraphics{resources/named.png}
+\end{figure}
+
+\begin{figure}
+\caption{Parsing A 25M Kafka Log}
+\label{fig:append:named}
+
+\includegraphics{resources/append-named.png}
+\end{figure}
 
 \section{Applicability}
 \label{section:applicability}
 
 It is hard to evaluate the applicability of the optimizations presented
 in this thesis. It is quite easy to invent scenarios where each
-optimization might be worthwhile, so any such examples alone are
+optimization might be worthwhile, so any such examples \emph{alone} are
 suspect. Existing regular expressions provide a better tool for
 evaluating applicability, but it is important to watch out for
 bias towards one particular application in any sample of existing
@@ -396,13 +543,13 @@ the more opportunity for first set collisions there are, which gets
 in the way of optimization. The sorts
 of regex used to scrape log files or extract data in a unix pipeline
 are more likely to have a linear feel than the regex found in
-libraries. As an example, the regex we used to convert the output
-of \texttt{cargo \allowbreak bench}, Rust's benchmarking utility, to a machine
-readable CSV format was
+libraries. As an example, the regex we used in our
+benchmark graphing scripts to parse the output
+of \texttt{cargo \allowbreak bench}, Rust's benchmarking utility, was
 \texttt{/test \allowbreak([a-zA-Z:\_]+) \allowbreak +... bench\allowbreak
       : \allowbreak+([0-9,]+) \allowbreak ns/iter \textbackslash
       (\textbackslash+/\textbackslash- \allowbreak
-      ([0-9,]+)\textbackslash).*\$/}
+      ([0-9,]+)\textbackslash).*\$/}.
 This regex contains multiple different opportunities for skip optimizations,
 but is not really general enough to put in a library. Contrast this
 with the regex

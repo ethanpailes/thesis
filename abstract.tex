@@ -1,7 +1,21 @@
 \begin{thesisabstract}
 
-% TODO: abstract 
+Regular expression engines can be used to quickly decide a
+regular language and to perform submatch extraction (parsing)
+on a regex containing capture groups. While there
+has been significant work that focuses on either
+deciding regular expressions or parsing them, to
+the best of our knowledge no one has considered the
+two problems separately. This thesis presents skip
+regex, an engine for performing regular expression
+parsing without considering the decision problem.
+We show that this facilitates significant optimization,
+and argue though examples that the capability to parse
+without deciding is a useful and applicable one, particularly
+in the case of regular expressions where the performance
+difference between DFAs and NFA simulations means that regex are
+often currently decided twice in practice.
 
- The abstract goes here.
+
 \nopagebreak
 \end{thesisabstract}

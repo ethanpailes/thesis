@@ -6,7 +6,7 @@ describing expected data. In the context of programming languages,
 pattern matching enables programmers to directly encode the shape
 of data they are interested in. The applications for textual pattern
 matching are even more widespread. Textual patterns are used for
-editing, ad-hoc parsing, url route dispatch, and a variety of
+editing, \textit{ad-hoc} parsing, url route dispatch, and a variety of
 bioinformatics processing tasks. This demand for textual pattern
 matching has led to a rich and evolved body of work on the subject.
 
@@ -59,7 +59,7 @@ A partial parse asks for a certain subset of a full parse tree,
 and allows any intervening data to be thrown out. It is impossible
 to perform a partial parse without assuming that the input text
 is in the language being parsed. This seems a little odd for a
-parsing problem, after all parsing is in large part about deciding
+parsing problem. After all, parsing is in large part about deciding
 languages, but it makes sense if only a subset of the input is
 examined. The whole purpose of a partial parse
 is to aid performance by only looking at the parts of the input which
@@ -99,7 +99,7 @@ an NFA some engines will first use a DFA to find the subset of the input
 which matches and then run an NFA on the matching (and hopefully
 smaller) input. Thus, the work in this thesis is applicable
 to regular expression parsing regardless of whether or not the user
-can actually grantee that the input matches the expression.
+can actually guarantee that the input matches the expression.
 
 A final motivation to consider is the possibility for use
 in parsing trusted text. Programs often make a distinction between
@@ -137,13 +137,10 @@ The biggest barrier to the drop-in replacement use case is the
 assumption that the input matches the expression. Fortunately,
 this issue can be overcome by using a DFA to filter out non-matching
 input. To demonstrate backwards compatibility we tested our implementation
-and argue that the optimizations we perform are semantics preserving.
+and argue informally that the optimizations we perform are
+semantics-preserving.
 
-The assumption of matching input means that skip regex must be 
-handled with care to avoid violating the partial parse invariant.
-Skip regex are otherwise semantically backwards compatible, so
-performance is the only place where this added complexity cost can be
-offset. Stated another way, skip regex are an optimization,
+Skip regex are an optimization,
 and optimizations are not worthwhile if they don't provide an
 actual performance win. To demonstrate the performance characteristics
 of skip regex, we provide micro benchmarks to showcase the specific
@@ -162,9 +159,6 @@ possibilities by allowing users to make a distinction between trusted
 and untrusted textual data. New programming approaches cannot be 
 examined by looking at existing regular expressions, so we provide
 case studies to examine the possibilities of this new approach.
-
-% TODO: present the case for using skip regex as a sort of macro-assembler
-%       for handwritten data munging code.
 
 % TODO: explain what the different chapters of the thesis are going to
 %       talk about.

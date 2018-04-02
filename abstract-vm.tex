@@ -1,4 +1,4 @@
-\chapter{Regular Expressions and An Abstract VM for Their Execution}
+\chapter{Regular Expressions and an Abstract VM for Their Execution}
 \label{chapter:abstractvm}
 
 The work presented in this thesis focuses on improvements to the
@@ -20,7 +20,7 @@ mind should help motivate the structure of the VM we present
 in section \ref{section:vm}.
 
 A regular expression can decide whether or not a given string
-matches and which substrings of the input match particular
+matches and which substrings of the input correspond to particular
 subsections of the regular expression, called capture groups.
 Here $\Sigma$ represents the alphabet from which characters in
 the input string are drawn.
@@ -29,7 +29,6 @@ the input string are drawn.
   <e> ::= $e e$
   \alt $e \rvert e$
   \alt $(e)$
-  \alt $\epsilon$
   \alt $\alpha$ {\tt where} $\alpha \subset \Sigma$
   \alt $e*$
   \alt $e+$
@@ -41,11 +40,10 @@ the input string are drawn.
 $e e$ represents concatenation of the two expressions,
 $e|e$ represents choice between the two expressions, $(e)$ indicates a
 capture group around $e$, $e*$ represents the Kleene closure of $e$,
-$\epsilon$ represents the empty regular expression which matches nothing,
 and $a$ indicates a regular expression which matches a character set.
 These forms alone are enough to talk about regular expressions, as
 the remaining forms can all be implemented in terms of this core set.
-The simpler formulation is usually preferred for theoretical work because
+A simpler formulation is usually preferred for theoretical work because
 it provides a smaller surface area that proofs must work with. 
 
 Of the remaining forms, $e+$ represents $e$ repeated 1 or more times,
@@ -57,8 +55,9 @@ included despite the theoretical preference for simplicity in
 order to facilitate discussion of optimizations.
 
 Some of the more complex forms found in the source language of real
-world regular expressions can be implemented more efficiently directly
-than they would otherwise be if first implemented in terms of the
+world regular expressions can be implemented more efficiently 
+when done so directly
+than they would otherwise be if first translated to the
 simpler form. For example, $e*$ requires an extra branch when compared
 with $e+$ to account for the possibility of zero repetitions.
 In order to fully explain the details of each of the
@@ -81,23 +80,6 @@ provided by the Rust regex crate.
 Literals are fixed strings of characters of length one or more.
 Stated differently, $l$ is called a literal if $l = a+$ for $a \in \Sigma$.
 
-\section{Nondeterministic Finite Automata}
-\label{section:nfadef}
-
-While most of the work in this thesis will focus on the representation
-of an NFA as a VM program, it is still sometimes useful to talk about
-a more traditional representation. To facilitate these cases, and to
-provide additional context for the definition of the regex VM we offer
-a brief definition of an NFA here.
-
-An NFA $n$ is defined as a 5-tuple of the form
-$\langle Q, \Sigma, \Delta, q_0, F \rangle$ where $Q$ is the
-set of states, $\Sigma$ is the alphabet, $\Delta$ is the transition
-function, $q_0$ is the initial state, and $F$ is a set of accepting
-states. We define the $\Delta$ function as a multiset of elements
-with the form $\langle q_f, c \rangle \rightarrow q_t$ where
-$q_f$ and $q_t$ are states in $Q$ and $c$ is a character in $\Sigma$.
-
 \section{The Regular Expression VM}
 \label{section:vm}
 
@@ -113,7 +95,7 @@ Regex VM instructions are executed in the context of a VM thread.
 A VM thread consists of an instruction pointer, which indicates
 the next VM instruction to be executed, an input cursor which
 indicates the current position in the input to be matched, and
-a finite number of capture slots. Capture slots are uses to
+a finite number of capture slots. Capture slots are used to
 track the start and end of capture groups with one slot for each
 end of the capture. After the regex execution, the capture groups
 are reconstructed from these slots. The \verb'save' instruction is
@@ -245,3 +227,20 @@ Instruction & Inst Type(s) & Description \\ \hline
 \caption{Skip VM Instructions}
 \label{table:skipinsts}
 \end{table}
+
+\section{Nondeterministic Finite Automata}
+\label{section:nfadef}
+
+While most of the work in this thesis will focus on the representation
+of an NFA as a VM program, it is still sometimes useful to talk about
+a more traditional representation. We offer
+a brief definition of an NFA here.
+
+An NFA $n$ is defined as a 5-tuple of the form
+$\langle Q, \Sigma, \Delta, q_0, F \rangle$ where $Q$ is the
+set of states, $\Sigma$ is the alphabet, $\Delta$ is the transition
+function, $q_0$ is the initial state, and $F$ is a set of accepting
+states. We define the $\Delta$ function as a multiset of elements
+with the form $\langle q_f, c \rangle \rightarrow q_t$ where
+$q_f$ and $q_t$ are states in $Q$ and $c$ is a character in $\Sigma$.
+
