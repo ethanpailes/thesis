@@ -1,0 +1,22 @@
+\begin{figure}
+\centering
+\caption{{\tt /a*/} NFA}
+\begin{tikzpicture}[->,>=stealth',shorten >=1pt,node distance = 2cm,semithick]
+  \tikzstyle{every state}=[text=black]
+
+  \node[initial,state]   (Q0)                {$q_0$}; 
+  \node[state]           (Q1) [right of=Q0]  {$q_1$}; 
+  \node[state]           (Q2) [right of=Q1]  {$q_2$}; 
+  \node[state,accepting] (Q3) [right of=Q2]  {$q_3$}; 
+  \path (Q0) edge node [above] {$\epsilon$} (Q1)
+             edge [bend right] node [above] {$\epsilon$} (Q3)
+
+        (Q1) edge node [below] {$a$} (Q2)
+
+        (Q2) edge node [above] {$\epsilon$} (Q3)
+             edge [bend right] node [above] {$\epsilon$} (Q1)
+        ;
+\end{tikzpicture}
+\label{fig:NFAastar}
+\end{figure}
+

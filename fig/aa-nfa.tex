@@ -1,0 +1,15 @@
+\begin{figure}
+\centering
+\caption{{\tt /aa/} NFA}
+\begin{tikzpicture}[->,>=stealth',shorten >=1pt,node distance = 2cm,semithick]
+  \tikzstyle{every state}=[text=black]
+
+  \node[initial,state]   (Q0)                {$q_0$}; 
+  \node[state]           (Q1) [right of=Q0]  {$q_1$}; 
+  \node[state,accepting] (Q2) [right of=Q1]  {$q_2$}; 
+  \path (Q0) edge node [above] {$a$} (Q1)
+
+        (Q1) edge node [above] {$a$} (Q2);
+\end{tikzpicture}
+\label{fig:NFAaa}
+\end{figure}

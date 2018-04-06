@@ -1,0 +1,33 @@
+\begin{figure}
+\centering
+\caption{{\tt /aa/} $\cap$ {\tt /a*/} NFA}
+\begin{tikzpicture}[->,>=stealth',shorten >=1pt,node distance = 2cm,semithick]
+  \tikzstyle{every state}=[text=black]
+
+  \node[initial,state]   (Q00)                {$q_{0,0}$}; 
+  \node[state]           (Q01) [below of=Q00] {$q_{0,1}$}; 
+  \node[state]           (Q03) [below of=Q01] {$q_{0,3}$}; 
+
+  \node[state]           (Q12) [right of=Q01] {$q_{1,2}$}; 
+  \node[state]           (Q11) [right of=Q12] {$q_{1,1}$}; 
+  \node[state]           (Q13) [below of=Q12] {$q_{1,3}$}; 
+
+  \node[state]           (Q22) [right of=Q11] {$q_{2,2}$}; 
+  \node[state]           (Q21) [above of=Q11] {$q_{2,1}$}; 
+  \node[state,accepting] (Q23) [below of=Q22] {$q_{2,3}$}; 
+
+  \path (Q00) edge [bend left]   node [right] {$\epsilon$} (Q01)
+        (Q00) edge [bend right]  node [left] {$\epsilon$} (Q03)
+
+        (Q01) edge node [above] {$a$} (Q12)
+
+        (Q12) edge node [above] {$\epsilon$} (Q11)
+        (Q12) edge node [right] {$\epsilon$} (Q13)
+
+        (Q11) edge node [above] {$a$} (Q22)
+        (Q11) edge node [right] {$a$} (Q23)
+        (Q11) edge node [right] {$a$} (Q21)
+        ;
+\end{tikzpicture}
+\label{fig:NFAaa:astar}
+\end{figure}

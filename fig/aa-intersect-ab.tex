@@ -1,0 +1,14 @@
+\begin{figure}
+\centering
+\caption{{\tt /aa/} $\cap$ {\tt /ab/} NFA}
+\begin{tikzpicture}[->,>=stealth',shorten >=1pt,node distance = 2cm,semithick]
+  \tikzstyle{every state}=[text=black]
+
+  \node[initial,state]   (Q00)                 {$q_{0,0}$}; 
+  \node[state]           (Q11) [right of=Q00]  {$q_{1,1}$}; 
+  \node[state,accepting] (Q22) [right of=Q11]  {$q_{2,2}$}; 
+  \path (Q00) edge node [above] {$a$} (Q11)
+        ;
+\end{tikzpicture}
+\label{fig:NFAaa:ab}
+\end{figure}
