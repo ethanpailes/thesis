@@ -145,11 +145,41 @@ The path $q_{0,0}, q_{0,1}, q_{1,2}, q_{1,1}, q_{2,3}$, flows from
 the start state to the accepting state, so the intersection of the
 two regex is not empty, as we would expect.
 
-\input{fig/aa-nfa}
-\input{fig/ab-nfa}
-\input{fig/aa-intersect-ab}
-\input{fig/astar-nfa}
-\input{fig/aa-intersect-astar}
+\begin{figure}
+\centering
+\caption{{\tt /aa/} NFA}
+    \input{fig/aa-nfa}
+\label{fig:NFAaa}
+\end{figure}
+
+\begin{figure}
+\centering
+\caption{{\tt /ab/} NFA}
+    \input{fig/ab-nfa}
+\label{fig:NFAab}
+\end{figure}
+
+
+\begin{figure}
+\centering
+\caption{{\tt /aa/} $\cap$ {\tt /ab/} NFA}
+    \input{fig/aa-intersect-ab}
+\label{fig:NFAaa:ab}
+\end{figure}
+
+\begin{figure}
+\centering
+\caption{{\tt /a*/} NFA}
+    \input{fig/astar-nfa}
+\label{fig:NFAastar}
+\end{figure}
+
+\begin{figure}
+\centering
+\caption{{\tt /aa/} $\cap$ {\tt /a*/} NFA}
+    \input{fig/aa-intersect-astar}
+\label{fig:NFAaa:astar}
+\end{figure}
 
 \subsubsection{Regex Intersection on VM Instructions}
 
