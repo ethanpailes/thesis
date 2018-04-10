@@ -23,23 +23,26 @@ elided, there is a great deal of opportunity for optimization.
 This thesis aims to explore how possible it is to separate regular
 expression parsing from the regular expression decision problem,
 and to show that focusing entirely on parsing while paying decision
-no heed can yield speedups.
+no heed can yield speedups. We investigate the benefits of this
+separation when both problems must be solved as well as when
+there is no need for decision.
 
 Stated more formally, the problem we set out to solve is to find
 the most efficient way to compute $captures(e, w)$ where $e$ is
-a regular expression, $w \in L(e)$, and $captures$ is a function
+a regular expression, $w \in L(e)$ where $L$ is a function from
+a regular expression to its language, and $captures$ is a function
 which returns the capture groups of a regular expression after
 a parse.
 
-To solve this problem, we present skip regex, a new regex engine
-which leverages the assumption that the input is in the language
+To solve this problem, we present skip regex, a new regex library,
+or engine, which leverages the assumption that the input is in the language
 of the regex being parsed. Skip regex extends the regular expression
 backend with the ability to skip forward to an arbitrary point in the
 input.
 
-\subsection{The Partial Parsing Invariant}
+\subsection{The Partial Parsing Assumption}
 
-We define the partial parsing invariant to mean that the
+We define the partial parsing assumption to mean that the
 input being parsed is in the language being parsed.
 
 \section{Motivation}
@@ -54,33 +57,34 @@ a small subset of a very large corpus of data stored in the filesystem.
 Forest uses PADS for parsing the contents of specific files, so the
 natural next step was to think about how partial parsing might
 be used in the context of ad-hoc data representations.
-
 A partial parse asks for a certain subset of a full parse tree,
 and allows any intervening data to be thrown out. It is impossible
-to perform a partial parse without assuming that the input text
-is in the language being parsed. This seems a little odd for a
-parsing problem. After all, parsing is in large part about deciding
-languages, but it makes sense if only a subset of the input is
-examined. The whole purpose of a partial parse
+to perform a partial parse without making the partial parsing assumption.
+The partial parsing assumption seems like an odd prerequisite for
+a parsing problem, as parsing is in large part about deciding
+languages. The whole purpose of a partial parse
 is to aid performance by only looking at the parts of the input which
 are absolutely necessary to understand the subset of the parse tree
 that we are really interested in. If we avoid looking at any part of
 the input, that portion of the input might contain syntax errors.
 Then if we want to only examine a subset of the input we must assume
-that the input is in the language being parsed.
+that the input is in the language being parsed. This should make it
+clear that the partial parsing assumption is necessary to make
+any progress in partial parsing.
 
 Compared with PADS, regular expressions have a small and
 constrained semantics which makes rapid iteration on new
 ideas easier. Regular expressions already have a very natural
 starting place for working on partial parsing built into their
 semantics in the form of capture groups. In fact all regex parses
-can be thought of as partial parses. The idea that the user wants
+can be thought of as partial parses because capture groups ask for
+a subset of the matching input. The idea that the user wants
 to know about the things inside capture groups but not outside of
 them aligns perfectly with the ideas we were developing about
 partial parsing. Any complete consideration of partial
 parsing in PADS will have to deal with partial parsing in regular
 expressions anyway, as regular expressions are important primitives in
-a PADS grammar. All of this pointed to regular expressions as a good
+a PADS grammar. All of these points pointed to regular expressions as a good
 starting point for research in partial parsing.
 
 There is also ample reason to examine partial parsing purely
@@ -122,10 +126,36 @@ untrusted data could prove useful.
 
 \section{Claims}
 
+\subsection{Skip Regex are Fast}
+
 Skip regex can be used on their own or
 in concert with a DFA regex engine to get speedups for
 regex partial parsing or full regex parsing respectively.
-Skip regex are backwards compatible with Rust's regex crate.
+Skip regex are an optimization, and optimizations are not worthwhile if
+they don't provide an actual performance win. To demonstrate
+the performance characteristics
+of skip regex, we provide micro benchmarks in section
+\ref{section:microbenchmarks} to showcase the specific
+capabilities of skip regex, case studies in section
+\ref{section:logparsingcase} to demonstrate their
+usefulness and performance in more realistic scenarios, and a
+discussion of their time complexity.
+
+\subsection{Skip Regex are Useful}
+
+Skip regex are only interesting if they are useful to programmers.
+The easiest way that the skip regex engine could be useful to programmers
+would be if its optimizations were applicable to the sorts of regex they
+are already writing. To check for the applicability of skip optimizations
+on existing regex we scraped \verb'crates.io',
+the Rust library repository, and checked
+to see which optimizations
+we could apply to each regex we found (section \ref{section:applicability}).
+Skip regex open up new programming
+possibilities by allowing users to make a distinction between trusted
+and untrusted textual data. New programming approaches cannot be 
+examined by looking at existing regular expressions, so we provide
+case studies to examine the possibilities of this new approach.
 
 Regular expressions are a well established tool, so any change in
 semantics would violate the principle of least surprise.
@@ -139,26 +169,6 @@ this issue can be overcome by using a DFA to filter out non-matching
 input. To demonstrate backwards compatibility we tested our implementation
 and argue informally that the optimizations we perform are
 semantics-preserving.
-
-Skip regex are an optimization,
-and optimizations are not worthwhile if they don't provide an
-actual performance win. To demonstrate the performance characteristics
-of skip regex, we provide micro benchmarks to showcase the specific
-capabilities of skip regex, case studies to demonstrate their
-usefulness and performance in more realistic scenarios, and a
-discussion of their time complexity.
-
-Skip regex are only interesting if they are useful to programmers.
-The easiest way that the skip regex engine could be useful to programmers
-would be if its optimizations were applicable to the sorts of regex they
-are already writing. To check for the applicability of skip optimizations
-on existing regex we scraped \verb'crates.io',
-the Rust library repository, and checked to see which optimizations
-we could apply to each regex we found. Skip regex open up new programming
-possibilities by allowing users to make a distinction between trusted
-and untrusted textual data. New programming approaches cannot be 
-examined by looking at existing regular expressions, so we provide
-case studies to examine the possibilities of this new approach.
 
 % TODO: explain what the different chapters of the thesis are going to
 %       talk about.
