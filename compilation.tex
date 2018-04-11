@@ -16,8 +16,9 @@ In order to make sure that the correct branch is taken in cases of
 ambiguity, we will need to be able to talk about the set of characters
 which might possibly start a regex match. To this end we introduce the
 notion of a \emph{first set} here. Let $e$ be a regular expression.
-$\{first(w) \rvert w \in L(e)\}$ where $first$ takes just the first character
-from a word, is the first set for $e$. The first set for a given
+The first set of an expression, $e$, is given by
+$\{first(w) \rvert w \in L(e)\}$ where $first$ takes just the first
+character from a word. The first set for a given
 regular expression can be computed by the recursive function $fset$,
 which is defined in figure \ref{fig:fsetdef}.
 
@@ -334,7 +335,8 @@ The \verb'code' function we present does not produce optimized code,
 but serves as a baseline over which we will layer optimizations
 in section \ref{section:skipscanopt}.
 The \verb'code' function performs some simple case analysis on its
-input and emits a recursively defined blob of code.
+input and emits a recursively defined sequence of VM instructions when applied
+to a regular expression.
 The particulars of this translation can
 be found in table \ref{table:codedef}.
 
@@ -446,11 +448,13 @@ $.$ & \verb'char SIGMA' & Here \verb'SIGMA' is $\Sigma$. \\ \hline
 This section presents the key contribution of this thesis. If any of
 these optimization patterns can apply, they are applied first, then
 the remainder of the regex is compiled using the ordinary compilation
-path. The applicability criterion for each optimization is discussed
-below, and the relative precedence of different optimizations is
-outlined in section \ref{section:optprecedence}.
+path. In our actual implementation, optimizations are interleaved with
+the standard compiler code paths, but it is easier to think about
+them in a layered fasion. The applicability criterion for each
+optimization is discussed below, and the relative precedence of different
+optimizations is outlined in section \ref{section:optprecedence}.
 
- This section just covers the most common cases; a discussion of
+This section just covers the most common cases; a discussion of
 how these common cases are extended to deal with minor semantic
 variations can be found in section \ref{section:optextend}.
 

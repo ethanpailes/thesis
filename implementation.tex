@@ -23,7 +23,7 @@ pick up until it is time to compile the regular expression.
 
 Skip regex are compiled by applying the \verb'code' function defined
 in the section \ref{section:compilation}. In practice, we make a
-few adjustments to the compilation technique for performance.
+few refinements to the compilation technique for performance.
 The biggest such change
 is to the format of the VM instructions that we execute. Rather than
 using explicit labels, each instruction is annotated with one or
@@ -53,13 +53,15 @@ space blowup, so it makes a good fallback despite running slower
 for small cases. Unfortunately, Pike's VM cannot handle branch
 precedence correctly when extended with the ability to execute
 skip instructions. Match disambiguation is not always required,
-so this does not completely negate the usefulness of Pike's VM
-when extended with skip instructions (\cite{Pike1987}).
+such as in the case of the expression
+\verb'/remind me (tonight|tomorrow)/',
+so Pike's VM can still sometimes be useful when extended with
+skip instructions (\cite{Pike1987}).
 
 \section{Backwards Incompatibilities or Missing Features}
 
 The Rust regex library is a mature and full featured regular expression
-engine. This provided significant opportunity to reuse well tested
+engine, which provided significant opportunity to reuse well tested
 components, but it also meant that bringing a new regex engine to
 full feature parity with the existing pipeline was difficult. We
 choose to defer implementation of a few features that the regex crate
@@ -69,27 +71,29 @@ they might be added to skip regex.
 
 The first feature we omit is support for case-insensitive regex.
 Many regex engines provide a flag which asks the engine to ignore
-case when performing a match. This is useful when searching for
-words embedded in natural language or keywords of a case-insensitive
+case when performing a match. Case-insensitivity is useful when searching
+for words embedded in natural language or keywords of a case-insensitive
 language like SQL. Implementing this feature can be performed as
 an AST rewrite pass, where each character is replaced by a character
 class which includes both the character and its capital version.
-For example \verb'/abc/' would be rewritten as \verb'/[aA][bB][cC]/'.
-Implementing this flag as an AST transform had a bit of an
-impedance mismatch with the version of the regex crate that we
-forked, but there is no reason it should not work with skip regex.
+For example \verb'/abc/' would be rewritten as \verb'/[aA][bB][cC]/'
+\footnote{In more recent versions of the regex crate than the one
+that we forked, we would have gotten this feature for free.}.
+We opted not to implement this feature to save time,
+but there is no reason it should not work with skip regex.
 
 The second feature we omit is unicode support. Unicode support in
 a regex library is non-trivial, primarily due to the fact that
-unicode code-points are variable width. This makes indexing into
+unicode code-points are variable width, which makes indexing into
 a unicode string $O(n)$ in the size of the string. The scan optimizations
-on skip regex would be unaffected by this, because they have to deal
+on skip regex would be unaffected by loosing access to constant time
+indexing, because they have to deal
 with scanning forward over chunks of the input anyway. Even in the
 context of a unicode string, substring search algorithms can operate at
 the byte level. The implementation of the skip instruction would require
 a bit more work. The simplest thing to do would be to just construct
 a unicode DFA to decode the input, and then use it to scan quickly
-forward. This would take the runtime of the skip instruction from
+forward, which would take the runtime of the skip instruction from
 $O(1)$ to $O(n)$, but the constant factor would still be lower
 than the cost associated with an NFA simulation. We could improve on
 this situation significantly by adding a separate \verb'skip-exact'
@@ -97,7 +101,7 @@ instruction for use in situations where the size in bytes of the
 skip can be statically determined. Thus, a literal unicode character
 which takes up three bytes would compile down to a \verb'skip-exact 3'
 instruction. Adding support for unicode to skip regex would be significantly
-more work than adding support for case folding, but would still be
+more work than adding support for case insensitivity, but would still be
 perfectly feasible.
 
 \section{Skip Bounded Backtracker}
@@ -132,7 +136,7 @@ laid out in algorithm \ref{algo:recurboundedback} takes an array of capture
 slots, an instruction pointer and a string pointer as input and returns
 either ``NoMatch'' to indicate that no match could be found
 or ``Match($captures$)'' to indicate that there was a match with the
-given capture slots. Some pre processing is required to
+given capture slots. Some pre-processing is required to
 set up the bitset (here called $seen$) and the capture slots,
 and some post processing is required to convert the capture slots
 to capture groups suitable for user consumption, but the core
@@ -152,11 +156,13 @@ readability. We use an explicit bitset rather than an abstract
 set to implement the seen-set. Rather than using explicit recursion,
 we use a heap-allocated stack of actions representing stack frames
 and a direct loop.
-We avoid copying the $captures$ array at every step by modifying
-a single captures array in place and introducing a restoration action
-which can be interleaved with the standard stack resumption action.
+Crucially, we avoid copying the $captures$ array at every step by
+modifying a single captures array in place and introducing a restoration
+action which can be interleaved with the standard stack resumption action.
 Similarly, the instruction pointer and string pointer are modified
-in place. Algorithm \ref{algo:loopboundedback} implements these
+in place. All of these implementation tricks were inspired by the
+bounded backtracker already found in the rust crate (\cite{GallantRegex}).
+Algorithm \ref{algo:loopboundedback} implements these
 optimizations. Several of the less interesting instructions are
 omitted for brevity, but it should be easy to see how the implementation
 of algorithm \ref{algo:loopboundedback}
@@ -303,7 +309,7 @@ While it is usually not as fast as the bounded backtracker,
 a modified version of Rob Pike's lockstep VM (\cite{Pike1987})
 can also be used to execute skip regex. The skip Pike VM cannot
 implement greedy vs lazy match differentiation, so it can't be
-used in situations where this is important.
+used in situations where differentiation is required.
 
 The core idea of a Pike VM is to maintain two sets of threads:
 one situated at the current character and one at the next character.
@@ -315,16 +321,18 @@ Such a scheme requires a representation of a set of threads
 between $0$ and $|regex|$ in size that supports fast containment
 checking, fast iteration, and fast clearing. A sparse set using
 uninitialized memory makes all of these operations constant except
-for iteration which is linear (\cite{Briggs1993}), which makes it
-a good choice for the representation of a thread set. This
+for iteration which is linear (\cite{Briggs1993}), making it
+a good choice for the representation of a thread set. Using
+a set to hold active threads at a given index
 effectively limits the number of steps which can occur
 at any character of input to be $O(|regex|)$, guaranteeing that
 the runtime does not exceed $O(|regex||input|)$. Typically the regex
-is small, so this can be thought of as linear in the size of the input.
+is quite small compared with the input, so NFA simulation runtime is best
+thought of as linear in the size of the input.
 
-In order to support skip regex, the Pike VM must be able to deal
-with threads in more than two locations. This requires expanding
-the queue of runnable threads beyond a couple of just thread sets.
+To support skip regex, the Pike VM must be able to deal
+with threads in more than two locations, which requires expanding
+the queue of runnable threads beyond just a pair of thread sets.
 It is tempting to place all threads in a priority queue where
 priority is determined by location in the input,
 but this approach would cause the running time to become
@@ -332,10 +340,11 @@ $O(|regex||input|lg(|regex||input|))$, as retrieving the highest
 priority thread would become logarithmic in the number of
 of potential runnable threads rather than being constant.
 
-To retain the algorithmic properties of the runqueue,
+To retain the algorithmic properties of the set of runnable threads,
 we instead use a fixed size ring buffer of sparse sets, with
 each set containing threads $n$ characters forward in the input,
-where $n$ is the distance from the current sparse set. This means
+where $n$ is the distance from the current sparse set. The fixed
+size of the ring buffer means
 that skips further ahead in the input than the length of the ring
 buffer cannot be executed in one step, but we observe that most
 skips are smaller than $60$, the ring buffer size that we choose
@@ -350,15 +359,15 @@ a 2-tuple of an instruction pointer and an array of capture slots.
 There is no need to store a string pointer because the thread set
 which contains a thread implies its offset into the string.
 Instructions like \verb'save' do not advance the string pointer,
-so the first step of the Pike VM pops $t_0$, executes save instruction
+so the first step of the Pike VM pops $t_0$, executes a save instruction
 by saving the current string pointer to the first capture slot, then
 pushes a new thread, $t_1$, to the current thread set. The second step
 does advance the string pointer, so when $t_1$ is transformed into $t_2$
 it is pushed to the thread set at index 1 instead of index 0.
 
 Figure \ref{fig:pikeexecskip} contains an example that walks through
-the execution of a simple program containing the \verb'skip' instruction.
-This demonstrates the ability to jump forward in the input, by pushing
+the execution of a simple program containing the \verb'skip' instruction,
+which demonstrates the ability to jump forward in the input, by pushing
 a new thread to one of the thread sets further ahead in the ring buffer.
 In such a case the skip Pike VM will notice that intermediate thread
 sets are empty, and quickly skip over them.
@@ -458,3 +467,27 @@ sets are empty, and quickly skip over them.
 
 \end{tabular}
 \end{figure}
+
+\section{Choosing a Backend}
+
+For skip expressions, the choice between backends is generally
+pretty easy. The bounded backtracker is almost always faster
+than the Pike VM, and the Pike VM will not predictably
+differentiate different matches. The question is really,
+``when would you want to use the Pike VM?'' rather than
+``which backend should you use?''. If an expression has
+no branches which might impact the capture groups of
+the expression\footnote{For example, all branches might appear
+within the only capture group.} and both the input and
+the regular expression are large enough that the cost of
+zeroing the backtracker's bitset becomes too high, it
+makes sense to use the Pike VM. Determining these cases
+are tricky, and we don't currently try attempt to do
+so automatically. Most users will want to just select
+the bounded backtracker.
+
+In the context of a regular expression engine which does not
+mind a potentially exponential runtime, such as pcre2, there
+would never be any reason to make use of the Pike VM. In such
+a case, the backtracker would not have a bitset to prevent
+exponential blowups.

@@ -40,7 +40,11 @@ a regex template and an input template which get instantiated
 based off of some scaling factor and then run with different
 backends. The scaling factor typically increases the input
 size by a constant number of characters, and less commonly
-increases the regex size. We run each microbenchmark at a
+increases the regex size. We indicate the parts of the
+input multiplied by the scaling factor by raising them
+to the \verb'n'the power. For example, \verb'abbbb' with \verb'a'
+repeated according to the scaling factor is written as
+${\tt a}^n{\tt bbbb}$. We run each microbenchmark at a
 number of different scaling factors using Rust's built in
 benchmarking facility, which takes a number of samples before
 reporting the average runtime plus the spread between the minimum
@@ -83,12 +87,12 @@ different benchmarks at a scaling factor of 8000.
 
 The best possible case for skip regex is where a regex is composed
 entirely of large literals. In such a case a standard regex engine
-must laboriously test ever input character, while a skip regex
+must laboriously test every input character, while a skip regex
 engine is allowed to traverse the input in a few big hops. Figure
 \ref{fig:a:big:skip} illustrates just such a case. Here we executed the
-regex \verb'/aaaa(bbbb)cccc/' on an input of the form \verb'aaaabbbbcccc'.
-In both the regex and the input, the number of \verb'a' and \verb'c'
-characters was multiplied by the scaling factor. As we might expect,
+regex ${\tt /aaaa}^n{\tt (bbbb)}{\tt cccc}^n{\tt /}$ on
+an input of the form ${\tt aaaa}^n{\tt bbbb}^n{\tt cccc}$.
+As we might expect,
 the graph shows that both the skip Pike VM and the skip backtracker
 beat out the non-skip backtracker quite handily, with the running time
 of the skip engines remaining virtually flat as the running
@@ -108,14 +112,13 @@ of the \verb'baseline-backtrack' configuration.
 \subsection{Leading $.*$}
 
 While not quite as good as being able to traverse the whole input
-in a few hops, a leading $.*$ which can be scanned over to find the
-correct terminator after the first try is still very fast. A standard
-regex must go through the expensive process of spawning two new threads
-for each character of input, one of which will die after each step.
-By contrast, a skip regex engine can drop right into a fast substring
+in a few hops, a leading $.*$ which never needs to rely on non-determinism
+A standard regex must go through the expensive process of spawning
+two new threads for each character of input, one of which will die after
+each step. By contrast, a skip regex engine can drop right into a fast substring
 search algorithm. We produced figure \ref{fig:leading:dotstar} by executing
-\verb'/.*(aaaa)/' on \verb'baaaa' with \verb'b' repeated according
-to the scaling factor. The graph shows that all the engines are linear
+\verb'/.*(aaaa)/' on ${\tt b}^n{\tt aaaa}$.
+The graph shows that all the engines are linear
 in the size of the input, but the constant factor for the skip engines
 is so much lower that they appear nearly constant time.
 
@@ -133,11 +136,12 @@ $.*$ scan optimization without also demonstrating the worst
 case. If the literal terminator appears many times before the
 end of the repetition, the skip engine will be forced to
 rapidly enter and leave the substring search algorithm, spawning
-two new threads on every iteration. This essentially makes
-the dotstar scan optimized code no better than a standard regex
-execution. To demonstrate this worst case situation we executed
-the regex \verb'/.*a(bbbb)/' on \verb'cabbbb' with \verb'ca'
-repeated according to the scaling factor. Figure \ref{fig:dotstar:bounce}
+two new threads on every iteration. Such an execution profile
+is no better than a standard regex execution.
+To demonstrate this worst case situation we executed
+the regex \verb'/.*a(bbbb)/' on ${\tt ca}^n{\tt bbbb}$. Note
+that it is \verb'ca' that is repeated according to the scaling factor,
+not just \verb'a'. Figure \ref{fig:dotstar:bounce}
 shows that the skip backtracker is slower than the standard
 backtracker due to the overhead of switching back and forth between the
 literal searcher and main engine loop. When the $.*$ optimization is
@@ -153,21 +157,24 @@ in the wild than the best case.
 \includegraphics{resources/dotstar-bounce.png}
 \end{figure}
 
-\subsection{Leading $e*$ scan}
+\subsection{Leading $el$ Scan}
 
-The $e*$ scan optimization only really has a best case, because
+The $el$ scan optimization only really has a best case, because
 the scan is always guaranteed to find the literal terminator. The
 effectiveness of the optimization is entirely determined by the
 size of the input, something which can be completely described
 by one experiment. We produced figure \ref{fig:leading:noncontaining:estar}
-by executing the regex \verb'a*foo(bar)' on \verb'afoobar' with \verb'a'
-repeated according to the scaling factor. 
-Just as in the ``Leading $.*$''
-experiment, all engines are linear, but the skip backends are so much
-faster that they appear almost constant time.
+by executing the regex \verb'a*foo(bar)' on ${\tt a}^n{\tt foobar}'$.
+Note that fact that \verb'foo' cannot appear in any of the strings
+in the language of \verb'/a*/' is determined statically, so no
+runtime cost is paid. Just as in the ``Leading $.*$'' experiment,
+all engines are linear, but the skip backends are so much faster that
+they appear almost constant time.
+
+% TODO: compile time.
 
 \begin{figure}
-\caption{Leading $e*$}
+\caption{Leading $el$ Scan}
 \label{fig:leading:noncontaining:estar}
 
 \includegraphics{resources/leading-noncontaining-estar.png}
@@ -178,9 +185,8 @@ faster that they appear almost constant time.
 When an expression contains a trailing $.*$ it can be compiled
 directly to a \verb'goto-end' instruction. To showcase the
 performance impact of this optimization we executed the
-regex \verb'(a+).*' on \verb'ab' with \verb'a' and \verb'b'
-repeated according to the scaling factor. Figure
-\ref{fig:aplus:trailing} shows the results. Both the standard
+regex \verb'(a+).*' on ${\tt a}^n{\tt b}^n$
+Figure \ref{fig:aplus:trailing} shows the results. Both the standard
 and skip engines have to process the first half of the input
 by spawning new threads, but the skip engine is always able
 to skip the second half. This results in a noticeable speedup.
@@ -199,8 +205,8 @@ regex. We include such a case to demonstrate that with the exception
 of a bouncing $.*$ optimization, the performance of skip regex is
 no worse than that of standard regex. We produced figure 
 \ref{fig:justtwo:branch}
-by executing the regex \verb'/(ab|ac)*/' on \verb'ab' with
-the input multiplied by the scaling factor. The fact that the
+by executing the regex \verb'/(ab|ac)*/' on ${\tt ab}^n$ with
+the while input multiplied by the scaling factor. The fact that the
 two branches of the alternative have intersecting first sets
 (in particular $\{a\}$ and $\{a\}$), means that skip optimizations
 can't be applied, and there is no clever way to get out of
@@ -275,7 +281,8 @@ let append_line = r"^.* with first offset: ([0-9]+).*value=([0-9]+).*$";
 let append_re = regex!(append_line, args.flag_validate);
 \end{verbatim}
 
-\verb'append_line' is a Rust raw string containing the regex we
+\noindent
+The \verb'append_line' variable contains Rust raw string containing the regex we
 plan to use, and \verb'append_re' is a compiled regex object ready for
 execution. \verb'regex!' is a previously defined Rust macro which
 constructs a regex from its first argument, using the standard engine
@@ -302,7 +309,7 @@ The first few lines are just a standard Rust song and dance to
 iterate over the lines of a file, buffering the input and filtering
 out any errors. We guard scrapping append data with a flag to allow
 us to study its performance in isolation or along with other
-scraping tasks. \verb'stats' is a struct containing the summary
+scraping tasks. The \verb'stats' variable is a struct containing the summary
 statistics we have collected so far about the log file. By far
 the most interesting thing going on in this block of code is
 the fact that \verb'scrape_append' has no way of knowing which
@@ -310,8 +317,8 @@ sort of regex engine is using. When used in validation mode,
 skip regex can be used for all the same things that standard
 regex can be used for.
 
-\verb'scrape_append' keeps track of the min and max log
-indices we we have seen appended to so far, the total
+The \verb'scrape_append' function keeps track of the min and max log
+indices we have seen appended to so far, the total
 number of bytes written, and the total number of appends.
 It is defined as
 
@@ -336,7 +343,7 @@ fn scrape_append<'a>(re: &Regex, line: &'a [u8], stats: &mut Stats) {
 }
 \end{verbatim}
 
-\verb'scrape_append' asks for the capture groups of the regex,
+It asks for the capture groups of the regex,
 then updates all the relevant statistics if a match occurs.
 
 \begin{figure}
@@ -363,8 +370,8 @@ time then comes from the 3900 matching lines. We stripped
 away the non-matching lines with grep to more directly observe
 the difference in performance of the two NFA simulations we got
 the shown in figure \ref{fig:append:just:match}.
-When the NFAs triggers every time the difference in performance
-is even more pronounced, demonstrating that the difference in performace
+When the NFAs must be used every time the difference in performance
+is even more pronounced, demonstrating that the difference in performance
 must be in the NFA simulation. The NFA simulation is the slowest part of
 the system, so Amdahl's Law tells us that improvements to it ought to have
 a disproportionately positive impact on overall runtime (\cite{Amdahl1967}).
@@ -372,8 +379,12 @@ This example confirms that intuition by showing that even when only a small
 subset of the input lines match, NFA performance really matters.
 
 \begin{figure}
-\caption{Parsing A 25M Kafka Log for Append Events}
+\caption{Parsing A 25M Kafka Log for Append Events.}
 \label{fig:append}
+
+The center line indicates average running time, the
+box indicates the lower and upper quartiles, whiskers show
+the range of values, and flier points show outliers.
 
 \includegraphics{resources/append.png}
 \end{figure}
@@ -382,11 +393,11 @@ subset of the input lines match, NFA performance really matters.
 \caption{Parsing 848K of Append Events}
 \label{fig:append:just:match}
 
+The input for this benchmark was synthesized by taking
+only the lines that matched from the original 25M log file.
+
 \includegraphics{resources/append-just-match.png}
 \end{figure}
-
-
-
 
 \subsection{Counting Scheduled Tasks}
 
@@ -395,7 +406,7 @@ the behavior of the server. Whenever one of these named
 tasks happens, Kafka logs it with a line like the one
 found in figure \ref{fig:namedevent}. We wanted to find out which
 events were the most common, and how many in total there were.
-To do this we needed to extract the event names using the
+To do so we needed to extract the event names using the
 regex
 
 \begin{verbatim}
@@ -403,8 +414,8 @@ let named_line = r".* scheduled task '(.+?)'.*";
 let named_re = regex!(named_line, args.flag_validate);
 \end{verbatim}
 
-this declaration follows the same pattern used above, so we
-won't go over it again. To collect statistics about scheduled
+Declaration of \verb'named_re' follows the same pattern used above,
+so we won't go over it again. To collect statistics about scheduled
 tasks, we just added
 
 \begin{verbatim}
@@ -413,8 +424,9 @@ if args.flag_named {
 }
 \end{verbatim}
 
-to the body of the loop shown above. \verb'scrape_named'
-is defined as
+\noindent
+to the body of the loop shown above. The \verb'scrape_named'
+function is defined as
 
 \begin{verbatim}
 fn scrape_named(re: &Regex, line: &[u8], stats: &mut Stats) {
@@ -430,6 +442,7 @@ fn scrape_named(re: &Regex, line: &[u8], stats: &mut Stats) {
 }
 \end{verbatim}
 
+\noindent
 just like \verb'scrape_append', \verb'scrape_named'
 tracks the total number of matching lines. \verb'stats.named_hist'
 is a \verb'HashMap' that we use to build a histogram tracking the
@@ -447,7 +460,8 @@ for &(ref n, ref e) in v.into_iter() {
 }
 \end{verbatim}
 
-this is a bit more work than we had to do to summarize the append
+\noindent
+which is a bit more work than we had to do to summarize the append
 events. It might seem like this extra work should make the impact
 of regex performance matter less, but our results show that
 skip regex are still able to make significant improvements.
@@ -514,10 +528,10 @@ existing regex.
 A nice thing about extending an existing regex engine
 with a decently sized user base is that a diverse group of developers
 have written all sorts of different regex using the existing syntax.
-In order to compile a list of such regex we pulled down all the
+To compile a list of such regex we pulled down all the
 crates on \verb'crates.io' which depend on the regex crate, and
 searched their source code for occurrences of the pattern
-\verb'Regex::new\((r?".*")\)'. This only collected a subset of
+\verb'Regex::new\((r?".*")\)'. We only collected a subset of
 the regex that could possibly be found, as there are ways to
 produce a Rust regex without calling \verb'Regex::new', but
 other methods of construction are unusual.
@@ -526,9 +540,11 @@ Once we had collected
 a list of 487 regex, we ran them though our compiler, taking
 note whenever an optimization was triggered. We found that
 82.8\% of regex could have some sort of skip optimization
-applied. 74.1\% of regex could have a literal compiled to a skip,
-but only 6.5\% could have a $.*$ optimization applied and 8.6\% could
-have a $e*$ optimization applied. 15.0\% could have some sort of
+applied. Most of this number comes from the fact that 74.1\% of
+regex could have a literal compiled to a skip,
+by contrast only 6.5\% could have a $.*$ optimization applied and 8.6\% could
+have a $e*$ optimization applied. When considering the skip
+optimizations together we found that 15.0\% could have some sort of
 scan optimization applied. It is heartening to see that most regex
 can benefit from skip optimizations, though the relatively low number
 of opportunities for scan optimizations is less so. While skip
@@ -549,8 +565,8 @@ of \texttt{cargo \allowbreak bench}, Rust's benchmarking utility, was
 \texttt{/test \allowbreak([a-zA-Z:\_]+) \allowbreak +... bench\allowbreak
       : \allowbreak+([0-9,]+) \allowbreak ns/iter \textbackslash
       (\textbackslash+/\textbackslash- \allowbreak
-      ([0-9,]+)\textbackslash).*\$/}.
-This regex contains multiple different opportunities for skip optimizations,
+      ([0-9,]+)\textbackslash).*\$/},
+which contains multiple different opportunities for skip optimizations,
 but is not really general enough to put in a library. Contrast this
 with the regex
 \texttt{
@@ -563,7 +579,7 @@ found in the \verb'wifiscanner' crate, which does not allow for
 optimization. It is possible for a one-off data munging script to include
 such a complex regex, and for a library to include a simple one, but
 it seems less likely. It is also worth noting the size of the corpus of
-regex we collected. 487 is a large enough number to get 
+regex we collected; 487 is a large enough number to get 
 percentages worth talking about, but it is not as large as it might
 be for a more mature language ecosystem.
 

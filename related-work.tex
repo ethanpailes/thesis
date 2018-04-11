@@ -10,7 +10,8 @@ result from Rabin and Scott (\cite{Rabin1959}) we know that
 these NFAs can be translated into equivalent DFAs. The powerset
 construction they provide trades a potentially exponential runtime
 blowup for a potentially exponential space blowup.
-This is often the end of the story as presented in CS curricula,
+The exponential runtime vs exponential space tradeoff,
+is often the end of the story as presented in CS curricula,
 but for the regex implementer it is only the beginning. Both
 naive NFA simulation and naive DFA construction are potentially exponential
 in some respect. Even worse, DFAs created via the powerset construction
@@ -33,7 +34,8 @@ on it and devotes most of its space to linear time simulation.
 It was really Aho, Hopcraft, and Ullman who formalized the regex to NFA
 translation as ``Thompson's Construction'' in a series of 
 publications, most notably ``The Design and Analysis of Computer Algorithms''
-(\cite{Aho1974}).
+(\cite{Aho1974}). The thread based approach that Thompson pioneered
+forms the basic paradigm on which skip regex build.
 
 The next chapter in regex tooling is about adding pragmatic text
 processing features. Building off of Thompson's work,
@@ -44,27 +46,31 @@ regular expression facility (\cite{Perl}). Perl's regular
 expressions included capture groups and back references, the
 latter feature actually making them non-regular. In order to
 support these features Perl's regex engine gave up on guaranteed
-linear time execution. It's backtracking NFA
+linear time execution. Perl's backtracking NFA
 simulation was easier to implement, faster than Thomson's VM in most
 cases, and easier to add features to. The success of Perl and its
 emphasis on using regular expressions for text processing quickly
 lead to a proliferation of backtracking regex engines (\cite{PCRE},
-\cite{PCRE2}, \cite{Python}, Java, Javascript).
+\cite{PCRE2}, \cite{Python}, Java, Javascript). The primary
+project of skip regex is making the submatch extraction feature
+pioneered by these engines more efficient.
 
 Backtracking NFA simulations had come to dominate the regular
 expression landscape outside of theoretical circles by the
 time that Russ Cox began work on executing untrusted regular
-expressions. On the face of it, regular expressions with their
+expressions\footnote{Regular expressions provided by unknown
+or untrusted users.}. On the face of it, regular expressions with their
 restricted semantics seem like a reasonable thing to expose to
 untrusted users, but any backtracking implementation will inevitably
 be vulnerable to a DOS attack in the event that a malicious user
 provides a pathological regular expression. In order to
-overcome this issue Cox wrote RE2, a library
+overcome this issue Russ Cox wrote RE2, a library
 which focuses on reclaiming guaranteed linear time execution (\cite{CoxRE2}).
 Like Perl before it, RE2 inspired other regex engines to
 follow its design philosophy, the most prominent of which are
 Rust's regex library (\cite{GallantRegex}) and go's regex library
-(\cite{GoLang}).
+(\cite{GoLang}). Skip regex are committed to avoiding an
+exponential runtime blowup by leveraging Cox's techniques.
 
 \section{Current Research}
 
@@ -79,7 +85,9 @@ work. Laurikari's tagged transitions are closely related to the
 (\cite{CoxVirtualMachineApproach}). The guaranteed linear
 running time of Laurikari's tagged NFAs makes them an excellent
 candidate for the sort of adversarial regex execution that RE2
-and its decedents aim to facilitate.
+and its decedents aim to facilitate. Skip regex build off of
+the tagging approach by re-using the idea of saving string offsets
+with special instructions.
 
 Sulzman and Lu provide a regex submatch extraction algorithm
 based on the concept of regular expression differentiation
@@ -100,37 +108,41 @@ Similarly, the regex \verb'/ab|ac/' differentiated with respect to
 idea of first-sets which are key to determining when
 the skip optimizations presented in this thesis are safe to perform.
 
-Sub-string search, the problem of finding a shorter string (the needle) in
+Substring search, the problem of finding a shorter string (the needle) in
 a longer string (the haystack), is a simpler problem than regular expression
-matching, and one that can be solved faster. The family of fast sub-string
+matching, and one that can be solved faster. The family of fast substring
 search algorithms known as Boyer-Moore all involve some pre-processing of
 the needle to enable sub-linear running time (\cite{Boyer1977}).
-The subject of sub-string search is very closely studied, leading to
+The subject of substring search is very closely studied, leading to
 endless variations on the core algorithm Robert Boyer and J Moore
 first presented. Fortunately for the uninitiated, Andrew Hume and
-Daniel Sunday performed a comprehensive review of the sub-string search
-literature, providing a clean taxonomy of sub-string search algorithms
+Daniel Sunday performed a comprehensive review of the substring search
+literature, providing a clean taxonomy of substring search algorithms
 and a recommendation to use a variant called Tuned Boyer-Moore
-(\cite{Hume1991}). This is not, however, the end of the story.
-When we implemented Tuned Boyer-Moore, we found that it was seldom
-able to beat a simpler approach based on frequency analysis and
-the \verb'memchr' function already found in the \verb'regex' crate
-(\cite{GallantRegex}). On Intel machines this difference boils down
-to the use of the \verb'pcmpeqb' instruction, which allows multiple
-bytes to be checked at once (\cite{IntelInstructionManual}); other
-platforms have their own hardware acceleration for sub-string search. 
+(\cite{Hume1991}). Theoretically ideal asymptotic complexity is not,
+however, the end of the story. When we implemented Tuned Boyer-Moore,
+we found that it was seldom able to beat a simpler approach based on
+frequency analysis and the \verb'memchr' function already found in
+the \verb'regex' crate (\cite{GallantRegex}). On Intel machines this
+difference boils down to the use of the \verb'pcmpeqb' instruction,
+which allows multiple bytes to be checked at once
+(\cite{IntelInstructionManual}); other platforms have their own hardware
+acceleration for substring search. Fast substring search is crucial to
+the scan optimizations of skip regex. Without the use of fast substring
+search, the results of this thesis would be considerably weaker.
 
-While not quite as fast as pure sub-string search, the multiple
-sub-string search problem can also be decided quite a bit faster than
+While not quite as fast as pure substring search, the multiple
+substring search problem can also be decided quite a bit faster than
 full regex matching. In particular the Aho-Corasick algorithm provides
-fast multiple sub-string search (\cite{Aho1975}). Just like Boyer-Moore,
-Aho-Corasick looses out to a hardware accelerated variant despite it's
+fast multiple substring search (\cite{Aho1975}). Just like Boyer-Moore,
+Aho-Corasick loses out to a hardware accelerated variant despite its
 theoretical elegance. The accelerated algorithm, called Teddy, seems
 to have first appeared in the hyperscan regex library (\cite{hyperscan}),
-and was reverse-engineered
-and illuminated in the Teddy library (\cite{Teddy}). The most important
-take-away of all of this is that sub-string and multiple sub-string
-search are quite a bit faster than full regular expression matching.
+and was reverse-engineered and illuminated in the Teddy library (\cite{Teddy}).
+The most important take-away is that substring and multiple
+substring search are quite a bit faster than full regular expression matching.
+We use multiple substring search for scan optimizations just as we do for
+single substring search.
 
 Haber provides an efficient DFA based submatch extraction algorithm,
 which managed to get significant runtime speedups at the cost of
@@ -153,8 +165,8 @@ just DFAs represents a significant advancement in the state of the art.
 Chivers provides a series of optimizations over standard NFA simulation
 approaches based on the notion of a regular expression preview
 (\cite{Chivers2016}). For any regex $r$, there exists a preview $p_n$
-such that $L(p_n) \supseteq \{ w[0..n] | w \in L(r) \}$. In English
-that means that an $n$-preview will recognize the first $n$ characters
+such that $L(p_n) \supseteq \{ w[0..n] | w \in L(r) \}$. In English,
+an $n$-preview will recognize the first $n$ characters
 of a match, but it might turn up some false positives. The thing that
 makes previews useful as an optimization tool is that they can be
 decided with very simple DFAs, which enjoy much faster execution than
@@ -164,7 +176,7 @@ branch, and a good way to find candidate locations to attempt a
 full parse. In this way, previews bear a lot of similarities to the
 scan optimizations presented in this thesis. In fact, previews can be
 viewed as a generalization of literal scanning. They are completely
-compatible, and indeed complimentary with the work presented in this
+compatible, and indeed complementary with the work presented in this
 thesis.
 
 % TODO: Briggs (An Efficient Representation of Sparse Sets)
