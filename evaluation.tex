@@ -19,8 +19,7 @@ skip regex for regular expressions found in the wild. We scraped
 for regular expressions and tested to see how applicable each of the 
 optimizations we perform are. 
 
-All benchmarks were run
-on the same 5 year old Lenovo Y500 with a 4 core
+All benchmarks were run on the same 5 year old Lenovo Y500 with a 4 core
 Intel\textregistered Core\textsuperscript{TM} i7-3630QM CPU @
 2.40GHz and 8 GiB of RAM.
 
@@ -65,7 +64,12 @@ indicate which optimizations have been enabled. For example,
 indicates that the skip backtracker with $.*$ scanning and $e*$ scanning
 enabled. When all optimizations are enabled we shorten this to
 \texttt{skip\allowbreak -\allowbreak backtracker\allowbreak -\allowbreak
-all}.
+all}. We don't present the same set of backend configurations for
+every microbenchmark because certain flags are only really informative
+in the context of some benchmarks. We also frequently omit Pike VM
+results because including them would alter the scale of our
+graphs in such a way as to make examining the more interesting
+backtracking results harder.
 
 Figure \ref{fig:8000:all} provides a comparison between all the
 different benchmarks at a scaling factor of 8000.
@@ -73,6 +77,11 @@ different benchmarks at a scaling factor of 8000.
 \begin{figure}
 \caption{Benchmarks at Scaling Factor 8000}
 \label{fig:8000:all}
+
+When the average running time of a benchmark exceeded a
+1000th of a second, we truncate the bar. The spread between
+the minimum and maximum running time collected is indicated
+with an error bar.
 
 \makebox[\textwidth]{
     \includegraphics[width=\paperwidth]{resources/8000-bar.png}
@@ -96,7 +105,10 @@ As we might expect,
 the graph shows that both the skip Pike VM and the skip backtracker
 beat out the non-skip backtracker quite handily, with the running time
 of the skip engines remaining virtually flat as the running
-time of the standard backtracker grows linearly with the scaling factor.
+time of the standard backtracker grows with the scaling factor.
+The input for this microbenchmark grows large enough that we can
+observe a shift in the constant factor of the bounded backtracker
+as the cost of zeroing its bitset starts to dominate.
 The performance improvement is entirely due to the literal skip
 optimization, as shown by the fact that the performance of the skip
 backtracker with literal skipping disabled is closer to the performance
@@ -222,7 +234,7 @@ the skip backtracker and the standard backtracker, but it is negligible.
 \caption{No Opt}
 \label{fig:justtwo:branch}
 
-\includegraphics{resources/justtwo-branch.png}
+\includegraphics{resources/no-opt.png}
 \end{figure}
 
 \section{Log Parsing: A Case Study}
