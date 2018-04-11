@@ -21,6 +21,9 @@ regular expressions quickly, they struggle to provide features
 such as submatch extraction. Because of the difference in speed
 of the two approaches, existing engines often first decide the input
 with a DFA and then use an NFA to parse the matching subset of input.
+Skip regex provide the to parse without deciding,
+and provide a performance improvement even when the input must
+be decided.
 
 \nopagebreak
 \end{thesisabstract}
