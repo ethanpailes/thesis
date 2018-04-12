@@ -1,7 +1,7 @@
 \chapter{Evaluation}
 \label{chapter:evaluation}
 
-In order to be worthwhile, skip regex must be faster than standard
+To be worthwhile, skip regex must be faster than standard
 regex and there must be ample opportunity to apply them. To evaluate
 the degree to which skip regex meet these goals, we perform a number
 of experiments. In section \ref{section:microbenchmarks}, we present a
@@ -64,15 +64,39 @@ indicate which optimizations have been enabled. For example,
 indicates that the skip backtracker with $.*$ scanning and $e*$ scanning
 enabled. When all optimizations are enabled we shorten this to
 \texttt{skip\allowbreak -\allowbreak backtracker\allowbreak -\allowbreak
-all}. We don't present the same set of backend configurations for
+all}. A summary of these specifiers can be found in table \ref{table:optspec}.
+We don't present the same set of backend configurations for
 every microbenchmark because certain flags are only really informative
 in the context of some benchmarks. We also frequently omit Pike VM
 results because including them would alter the scale of our
 graphs in such a way as to make examining the more interesting
 backtracking results harder.
 
+\begin{table}
+\caption{Optimization Specifiers}
+\label{table:optspec}
+\centering
+
+The flags used to configure different backends for benchmarking.
+Note that the trailing $.*$ optimization has no special flag,
+as it is always enabled.
+
+\begin{tabular}{| l | l |} \hline
+Specifier & Optimization Enabled \\ \hline
+\texttt{all} & All Optimizations \\ \hline
+\texttt{es} & Literal Terminated Scan \\ \hline
+\texttt{ds} & Dotstar Scan \\ \hline
+\texttt{sl} & Literal Skip \\ \hline
+\end{tabular}
+
+\end{table}
+
 Figure \ref{fig:8000:all} provides a comparison between all the
-different benchmarks at a scaling factor of 8000.
+different benchmarks at a scaling factor of 8000. The graph shows a number
+of cases where skip optimizations provide significant speedups,
+and a couple cases constructed to demonstrate worst case
+behavior for skip regex. More detailed discussions of each individual
+micro benchmark can be found below.
 
 \begin{figure}
 \caption{Benchmarks at Scaling Factor 8000}
@@ -109,10 +133,14 @@ time of the standard backtracker grows with the scaling factor.
 The input for this microbenchmark grows large enough that we can
 observe a shift in the constant factor of the bounded backtracker
 as the cost of zeroing its bitset starts to dominate.
-The performance improvement is entirely due to the literal skip
+The performance improvement is due to the literal skip
 optimization, as shown by the fact that the performance of the skip
-backtracker with literal skipping disabled is closer to the performance
-of the \verb'baseline-backtrack' configuration.
+backtracker with literal skipping disabled (\verb'skip-backtrack-ds-es')
+is closer to the performance of the \verb'baseline-backtrack' configuration.
+% Different workloads result in slightly different constant factors for the
+% two backtracking implementations, even without a particular skip optimization
+% coming into play\footnote{See section \ref{section:noopt} for an example
+% where the constant factor difference runs the other way.}.
 
 \begin{figure}
 \caption{A Big Skip}
@@ -125,6 +153,7 @@ of the \verb'baseline-backtrack' configuration.
 
 While not quite as good as being able to traverse the whole input
 in a few hops, a leading $.*$ which never needs to rely on non-determinism
+still has a big opportunity to produce a speedup.
 A standard regex must go through the expensive process of spawning
 two new threads for each character of input, one of which will die after
 each step. By contrast, a skip regex engine can drop right into a fast substring
@@ -189,7 +218,7 @@ they appear almost constant time.
 \caption{Leading $el$ Scan}
 \label{fig:leading:noncontaining:estar}
 
-\includegraphics{resources/leading-noncontaining-estar.png}
+\includegraphics{resources/leading-estar.png}
 \end{figure}
 
 \subsection{Trailing $.*$}
@@ -211,6 +240,7 @@ to skip the second half. This results in a noticeable speedup.
 \end{figure}
 
 \subsection{No Opt}
+\label{section:noopt}
 
 In some cases no optimizations can be usefully applied to a skip
 regex. We include such a case to demonstrate that with the exception
@@ -332,7 +362,13 @@ regex can be used for.
 The \verb'scrape_append' function keeps track of the min and max log
 indices we have seen appended to so far, the total
 number of bytes written, and the total number of appends.
-It is defined as
+Defined in figure \ref{fig:scrapeappendimpl},
+it asks for the capture groups of the regex,
+then updates all the relevant statistics if a match occurs.
+
+\begin{figure}
+\caption{\texttt{scrape\_append} implementation}
+\label{fig:scrapeappendimpl}
 
 \begin{verbatim}
 fn scrape_append<'a>(re: &Regex, line: &'a [u8], stats: &mut Stats) {
@@ -354,9 +390,8 @@ fn scrape_append<'a>(re: &Regex, line: &'a [u8], stats: &mut Stats) {
     }
 }
 \end{verbatim}
+\end{figure}
 
-It asks for the capture groups of the regex,
-then updates all the relevant statistics if a match occurs.
 
 \begin{figure}
 \caption{Example Append Event Log Line}
@@ -574,19 +609,21 @@ are more likely to have a linear feel than the regex found in
 libraries. As an example, the regex we used in our
 benchmark graphing scripts to parse the output
 of \texttt{cargo \allowbreak bench}, Rust's benchmarking utility, was
-\texttt{/test \allowbreak([a-zA-Z:\_]+) \allowbreak +... bench\allowbreak
-      : \allowbreak+([0-9,]+) \allowbreak ns/iter \textbackslash
-      (\textbackslash+/\textbackslash- \allowbreak
-      ([0-9,]+)\textbackslash).*\$/},
+
+\begin{verbatim}
+/^test ([a-zA-Z:_]+) +... bench: +([0-9,]+) ns/iter \(\+/\- ([0-9,]+)\).*$/
+\end{verbatim}
+
+\noindent
 which contains multiple different opportunities for skip optimizations,
 but is not really general enough to put in a library. Contrast this
 with the regex
-\texttt{
-/([0-9a-zA-Z]\allowbreak\{1\}\allowbreak/\allowbreak
-[0-9a-zA-Z]\{1\}\allowbreak[:]\allowbreak\{1\})
-\{5\}\allowbreak[0-9a-zA-Z]\allowbreak{1}\allowbreak[0-9a-zA-Z]
-\allowbreak\{1\}/
-}
+
+\begin{verbatim}
+/([0-9a-zA-Z]{1}[0-9a-zA-Z]{1}[:]{1}){5}[0-9a-zA-Z]{1}[0-9a-zA-Z]{1}/
+\end{verbatim}
+
+\noindent
 found in the \verb'wifiscanner' crate, which does not allow for
 optimization. It is possible for a one-off data munging script to include
 such a complex regex, and for a library to include a simple one, but
