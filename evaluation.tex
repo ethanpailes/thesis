@@ -28,20 +28,20 @@ Intel\textregistered Core\textsuperscript{TM} i7-3630QM CPU @
 
 Microbenchmarks alone are not typically enough to develop a high
 level understanding of application performance, yet they remain
-quite useful for demonstrating performance edge cases. Put another
-way, microbenchmarks are excellent tools for performance story
+quite useful for demonstrating the edges of the performance envelope.
+Put another way, microbenchmarks are excellent tools for performance story
 telling. Sometimes such story telling can be used to deceive,
-but we will attempt to avoid any deception and instead focus
-on the performance trade-offs of skip regex.
+but we will attempt to avoid any deception and showcase both the
+best and worst cases for skip regex.
 
 The micro benchmarks we present in this section each consist of
 a regex template and an input template which get instantiated
 based off of some scaling factor and then run with different
-backends. The scaling factor typically increases the input
-size by a constant number of characters, and less commonly
-increases the regex size. We indicate the parts of the
+backends. The input size typically grows with the scaling factor,
+and sometimes the size of the regular expression also
+grows with the scaling factor. We indicate the parts of the
 input multiplied by the scaling factor by raising them
-to the \verb'n'the power. For example, \verb'abbbb' with \verb'a'
+to the \verb'n'th power. For example, \verb'abbbb' with \verb'a'
 repeated according to the scaling factor is written as
 ${\tt a}^n{\tt bbbb}$. We run each microbenchmark at a
 number of different scaling factors using Rust's built in
@@ -102,7 +102,7 @@ micro benchmark can be found below.
 \caption{Benchmarks at Scaling Factor 8000}
 \label{fig:8000:all}
 
-When the average running time of a benchmark exceeded a
+When the average running time of a benchmark exceeded one
 1000th of a second, we truncate the bar. The spread between
 the minimum and maximum running time collected is indicated
 with an error bar.
@@ -205,7 +205,7 @@ the scan is always guaranteed to find the literal terminator. The
 effectiveness of the optimization is entirely determined by the
 size of the input, something which can be completely described
 by one experiment. We produced figure \ref{fig:leading:noncontaining:estar}
-by executing the regex \verb'a*foo(bar)' on ${\tt a}^n{\tt foobar}'$.
+by executing the regex \verb'/a*foo(bar)/' on ${\tt a}^n{\tt foobar}$.
 Note that fact that \verb'foo' cannot appear in any of the strings
 in the language of \verb'/a*/' is determined statically, so no
 runtime cost is paid. Just as in the ``Leading $.*$'' experiment,
@@ -226,7 +226,7 @@ they appear almost constant time.
 When an expression contains a trailing $.*$ it can be compiled
 directly to a \verb'goto-end' instruction. To showcase the
 performance impact of this optimization we executed the
-regex \verb'(a+).*' on ${\tt a}^n{\tt b}^n$
+regex \verb'/(a+).*/' on ${\tt a}^n{\tt b}^n$
 Figure \ref{fig:aplus:trailing} shows the results. Both the standard
 and skip engines have to process the first half of the input
 by spawning new threads, but the skip engine is always able
@@ -252,7 +252,7 @@ the while input multiplied by the scaling factor. The fact that the
 two branches of the alternative have intersecting first sets
 (in particular $\{a\}$ and $\{a\}$), means that skip optimizations
 can't be applied, and there is no clever way to get out of
-executing the full kleene star. There is still some spread between
+executing the full Kleene star. There is still some spread between
 the different engines, most notably between the Pike VMs and the
 bactrackers, as backtrackers are generally faster. The skip Pike VM
 has a higher constant factor than the standard Pike VM when optimizations
@@ -429,8 +429,8 @@ subset of the input lines match, NFA performance really matters.
 \caption{Parsing A 25M Kafka Log for Append Events.}
 \label{fig:append}
 
-The center line indicates average running time, the
-box indicates the lower and upper quartiles, whiskers show
+The center lines indicate average running time, the
+boxes indicate the lower and upper quartiles, the whiskers show
 the range of values, and flier points show outliers.
 
 \includegraphics{resources/append.png}
@@ -461,6 +461,7 @@ let named_line = r".* scheduled task '(.+?)'.*";
 let named_re = regex!(named_line, args.flag_validate);
 \end{verbatim}
 
+\noindent
 Declaration of \verb'named_re' follows the same pattern used above,
 so we won't go over it again. To collect statistics about scheduled
 tasks, we just added
@@ -534,8 +535,8 @@ Figure \ref{fig:named} shows a nearly 50\% speedup for skip regex.
 At the megabyte scale, the difference between 2 and 1 tenth of
 a second is not that noticeable, but when log files start running
 into the gigabyte range, as can easily happen for long running
-networked systems like Kafka, it is a serious quality of life
-improvement.
+networked systems like Kafka, a 50\% speedup is a serious quality
+of life improvement.
 
 Figure \ref{fig:append:named} shows how our scraping script
 performed when we ran both set of analysis at once. Again,

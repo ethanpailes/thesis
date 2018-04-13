@@ -110,7 +110,7 @@ the skip optimizations presented in this thesis are safe to perform.
 
 Substring search, the problem of finding a shorter string (the needle) in
 a longer string (the haystack), is a simpler problem than regular expression
-matching, and one that can be solved faster. The family of fast substring
+matching, and one that can be solved much faster. The family of fast substring
 search algorithms known as Boyer-Moore all involve some pre-processing of
 the needle to enable sub-linear running time (\cite{Boyer1977}).
 The subject of substring search is very closely studied, leading to
@@ -162,8 +162,8 @@ remedied by lazy compilation as is typically done for the subset
 construction. The ability to compute capture groups with
 just DFAs represents a significant advancement in the state of the art.
 
-Chivers provides a series of optimizations over standard NFA simulation
-approaches based on the notion of a regular expression preview
+Howard Chivers provides a series of optimizations over standard NFA
+simulation approaches based on the notion of a regular expression preview
 (\cite{Chivers2016}). For any regex $r$, there exists a preview $p_n$
 such that $L(p_n) \supseteq \{ w[0..n] | w \in L(r) \}$. In English,
 an $n$-preview will recognize the first $n$ characters

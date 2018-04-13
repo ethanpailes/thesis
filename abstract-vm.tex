@@ -32,7 +32,7 @@ the input string are drawn.
   <e> ::= $e e$ \qquad $\triangleright$ concatenate two regular expressions
   \alt $e \rvert e$ \qquad $\triangleright$ either one expression or the other
   \alt $(e)$ \qquad $\triangleright$ capture a subexpression
-  \alt $\alpha$ {\tt where} $\alpha \subset \Sigma$
+  \alt $\alpha$ {\tt where} $\alpha \subseteq \Sigma$
         \qquad $\triangleright$ a character set
   \alt $e*$ \qquad $\triangleright$
                 repeat an expression zero or more times, prefer longer matches
@@ -86,6 +86,14 @@ useful to be able to write example regular expressions with explicit
 precedence. In such cases we will use $(?:e)$ to indicate a grouping
 of $e$ without a corresponding capture. The Rust regex crate
 provides the same syntax.
+
+\subsection{A Note on Notation}
+
+In more theoretical contexts we typeset regex expressions as
+$math$, but when it makes sense to talk about an expression in
+terms of the actual concrete syntax that we implemented we
+use \verb'teletype' font and bracket expressions in \verb'/slashes/'
+to indicate a regular expression literal.
 
 \subsection{Literals}
 
@@ -156,9 +164,9 @@ Our extensions to the instruction set can be found in table
 \ref{table:skipinsts}.
 \begin{tabular}{| l | c | p{9cm} |} \hline
 Instruction & Inst Type(s) & Description \\ \hline
-{\tt jmp $l_1$} & Control Flow &
+{\tt jmp $L$} & Control Flow &
     \verb'jmp' tells the VM to set the instruction pointer
-    to $l_1$. Note that the input cursor does not move. \\ \hline
+    to $L$. Note that the input cursor does not move. \\ \hline
 {\tt match} & Control Flow &
     \verb'match' indicates a match. The VM may stop. The behavior of match
     is slightly complicated by the presence of an end anchoring
@@ -173,9 +181,9 @@ Instruction & Inst Type(s) & Description \\ \hline
     the current char is in $\alpha$ (where $\alpha \subset \Sigma$).
     If the current char is in $\alpha$, the VM must advance the input cursor
     for the current thread. \\ \hline
-{\tt split $l_1$ $l_2$} & Control Flow &
-    \verb'split' tells the VM to spawn new threads, $t_1$ at $l_1$ 
-    and $t_2$ at $l_2$. The parent thread dies.
+{\tt split $L_1$ $L_2$} & Control Flow &
+    \verb'split' tells the VM to spawn new threads, $t_1$ at $L_1$ 
+    and $t_2$ at $L_2$. The parent thread dies.
     If $t_1$ or any of its children match and
     $t_2$ or any of its children match, the VM must return
     the match from $t_1$. Thus the code:
@@ -215,7 +223,7 @@ Instruction & Inst Type(s) & Description \\ \hline
     Skip is an extension
     instruction provided specifically to facilitate the optimizations
     presented here. \\ \hline
-{\tt scan-end $l$} & Test \& Control Flow &
+{\tt scan-end $lit$} & Test \& Control Flow &
     This test instruction tells the VM to scan forward in the input to find
     the literal $l$. If $l$ is not found, the VM must kill the current thread,
     otherwise it must place the input cursor
@@ -229,12 +237,12 @@ Instruction & Inst Type(s) & Description \\ \hline
     While a test instruction, the \verb'scan-end' instruction can
     significantly advance the input cursor, so it can also be classified
     as a control flow instruction. \\ \hline
-{\tt scan-begin $l$} & Test \& Control Flow &
+{\tt scan-begin $lit$} & Test \& Control Flow &
     This instruction behaves just like \verb'scan-end' except that the
     VM must place the input cursor at the beginning of the literal on
     a successful match. \verb'scan-begin' is an extension instruction.
     \\ \hline
-{\tt goto-end $l$} & Control Flow &
+{\tt goto-end} & Control Flow &
     This instruction tells the VM to just jump to the end of the input.
     It is included to facilitate optimizing trailing $.*$ expressions.
     \\ \hline
@@ -256,5 +264,8 @@ set of states, $\Sigma$ is the alphabet, $\Delta$ is the transition
 function, $q_0$ is the initial state, and $F$ is a set of accepting
 states. We define the $\Delta$ function as a multiset of elements
 with the form $\langle q_f, c \rangle \rightarrow q_t$ where
-$q_f$ and $q_t$ are states in $Q$ and $c$ is a character in $\Sigma$.
-
+$q_f$ and $q_t$ are states in $Q$ and $c$ is in
+$\Sigma \cup \{ \epsilon \}$. Note that transitions where $c = \epsilon$
+indicate a so-called $\epsilon$ edge. Whenever execution reaches a
+node with any outgoing $\epsilon$ edges, the NFA non-deterministically
+splits to both follow the edge and remain where it is.

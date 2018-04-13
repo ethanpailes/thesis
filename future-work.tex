@@ -6,7 +6,7 @@ expressions than just literals. The simplest case is skipping over
 alternatives where each branch is of the same length. A more interesting
 problem is adding AST rewrite passes which factor common prefixes and
 suffixes out of alternatives in order to increase the length of skips.
-For example \verb'/a(?:bbc|bbyx)/' might could be rewritten as
+For example \verb'/a(?:bbc|bbyx)/' could be rewritten as
 \verb'/abb(?:c|yx)/'.
 
 Both the skip regex optimizations presented in this thesis and

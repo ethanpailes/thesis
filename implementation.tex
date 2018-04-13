@@ -10,7 +10,7 @@ than start a fresh project allowed us to reuse the parser,
 testing tools, and even a few implementation techniques. Extending
 an existing library made it even easier to provide backwards
 compatibility with an existing ecosystem. Our implementation
-can be found at \cite{PailesSkipRegex}.
+can be found on the web at \cite{PailesSkipRegex}.
 
 \section{Architecture}
 
@@ -41,7 +41,7 @@ implementation is covered in greater detail below, but the core
 idea of a bounded backtracker is to extend a standard backtracker
 with a bitset indicating which states the engine has already
 been in. So long as history does not matter (which is the case
-when back-references are not allowed), it is safe to skip any
+so long as back-references are not allowed), it is safe to skip any
 state which has already been visited. Doing so has the benefit
 of restoring guaranteed linear running time.
 
@@ -92,7 +92,8 @@ with scanning forward over chunks of the input anyway. Even in the
 context of a unicode string, substring search algorithms can operate at
 the byte level. The implementation of the skip instruction would require
 a bit more work. The simplest thing to do would be to just construct
-a unicode DFA to decode the input, and then use it to scan quickly
+a unicode DFA\footnote{Or more likely, just reuse an existing one.}
+to decode the input, and then use it to scan quickly
 forward, which would take the runtime of the skip instruction from
 $O(1)$ to $O(n)$, but the constant factor would still be lower
 than the cost associated with an NFA simulation. We could improve on
@@ -110,7 +111,7 @@ The primary backend used to execute skip regex is the skip bounded
 backtracker. Backtracking regex engines have a long history.
 Their speed, ease of implementation, and extensibility make them
 a great choice for a regex backend, but they suffer from a worst-case
-exponential running time. This exponential blow up can be fixed by
+exponential running time. The exponential blow up can be fixed by
 keeping a bitset which tracks every state that the engine has
 ever been in, where a state is identified by the tuple of the
 instruction pointer and the input index. Once the engine has
@@ -123,9 +124,10 @@ space. Very few executions cause the NFA simulation to enter all
 or most states, but initializing the bitset to all zeros must always
 touch every state bit. When the expression and input are small, the
 cost is negligible, but as they grow it eventually starts to dominate.
-All of the skip regex optimizations we perform have the effect of
-reducing code size, which cuts down on the size of the bitset,
-and hence the cost of its initialization.
+One subtle benefit of the skip regex optimizations we perform is that
+they all have the effect of reducing code size,
+which cuts down on the size of the bitset, and hence the cost of
+its initialization.
 
 \subsection{Algorithm}
 
@@ -149,7 +151,7 @@ some cases where skip regex \emph{can} detect invalid input at no
 extra cost, and there is no particular reason to avoid telling the
 user about such cases.
 
-Algorithm \ref{algo:recurboundedback} is still presented at a
+Algorithm \ref{algo:recurboundedback} is presented at a
 high level, and there are a number of tricks that we use in the
 real implementation which improve performance at the cost of
 readability. We use an explicit bitset rather than an abstract
@@ -166,7 +168,8 @@ Algorithm \ref{algo:loopboundedback} implements these
 optimizations. Several of the less interesting instructions are
 omitted for brevity, but it should be easy to see how the implementation
 of algorithm \ref{algo:loopboundedback}
-might be translated from algorithm \ref{algo:recurboundedback}.
+might be translated from algorithm \ref{algo:recurboundedback} in
+such cases.
 
 \begin{algorithm}
 \caption{Recursive Bounded Backtracker}
@@ -291,7 +294,6 @@ might be translated from algorithm \ref{algo:recurboundedback}.
             \Comment{Some cases omitted.}
           \EndSwitch
         \EndWhile
-        \State \textbf{return} false
       \EndCase
       \Case{$Restore(slot, val)$}
         \State $captures[slot] = val$
@@ -299,6 +301,7 @@ might be translated from algorithm \ref{algo:recurboundedback}.
       \EndCase
     \EndSwitch
   \EndWhile
+  \State \textbf{return} false
 \EndProcedure
 \end{algorithmic}
 \end{algorithm}
@@ -311,7 +314,7 @@ can also be used to execute skip regex. The skip Pike VM cannot
 implement greedy vs lazy match differentiation, so it can't be
 used in situations where differentiation is required.
 
-The core idea of a Pike VM is to maintain two sets of threads:
+The core idea of a Pike VM is to maintain just two sets of threads:
 one situated at the current character and one at the next character.
 In a standard NFA simulation, no thread will ever spawn with
 a string pointer in any location besides these two, and
@@ -367,7 +370,7 @@ it is pushed to the thread set at index 1 instead of index 0.
 
 Figure \ref{fig:pikeexecskip} contains an example that walks through
 the execution of a simple program containing the \verb'skip' instruction,
-which demonstrates the ability to jump forward in the input, by pushing
+which demonstrates the ability to jump forward in the input by pushing
 a new thread to one of the thread sets further ahead in the ring buffer.
 In such a case the skip Pike VM will notice that intermediate thread
 sets are empty, and quickly skip over them.
@@ -474,7 +477,7 @@ For skip expressions, the choice between backends is generally
 pretty easy. The bounded backtracker is almost always faster
 than the Pike VM, and the Pike VM will not predictably
 differentiate different matches. The question is really,
-``when would you want to use the Pike VM?'' rather than
+``when would you ever want to use the Pike VM?'' rather than
 ``which backend should you use?''. If an expression has
 no branches which might impact the capture groups of
 the expression\footnote{For example, all branches might appear
@@ -482,7 +485,7 @@ within the only capture group.} and both the input and
 the regular expression are large enough that the cost of
 zeroing the backtracker's bitset becomes too high, it
 makes sense to use the Pike VM. Determining these cases
-are tricky, and we don't currently try attempt to do
+are tricky, and we don't currently attempt to do
 so automatically. Most users will want to just select
 the bounded backtracker.
 

@@ -25,15 +25,16 @@ which is defined in figure \ref{fig:fsetdef}.
 \begin{figure}
 \label{fig:fsetdef}
 \caption{fset}
+\centering
+
 \begin{tabular}{l c l c l c l}
 $fset(e_1 e_2)$ & $=$ & $fset(e_1)$ & &
   $fset(e_1 \rvert e_2)$ & $=$ & $fset(e_1) \cup fset(e_2)$ \\
 $fset((e))$ & $=$ & $fset(e)$ & &
-  $fset(\epsilon)$ & $=$ & $\emptyset$ \\
-$fset(\alpha)$ & $=$ & $\alpha$ & &
   $fset(e*)$ & $=$ & $fset(e)$ \\
-$fset(e+)$ & $=$ & $fset(e)$ & &
+$fset(\alpha)$ & $=$ & $\alpha$ & &
   $fset(e*?)$ & $=$ & $fset(e+?)$ \\
+$fset(e+)$ & $=$ & $fset(e)$ & & & & \\
 $fset(.)$ & $=$ & $\Sigma$ & & & & \\
 \end{tabular}
 \end{figure}
@@ -64,7 +65,7 @@ right direction.
 A regex automaton decides the empty set if no final state is reachable
 from the start state, so if we can construct a new NFA which simulates
 running two NFAs in lockstep, we will be able to statically determine
-if the intersection of two regex is empty using standard graph
+if the intersection of two regex is empty using off the shelf graph
 search algorithms. We construct an
 intersecting automaton by taking the Cartesian product
 of the two state sets to form a new state set, then adding edges
@@ -80,6 +81,7 @@ where
 $$Q_i = Q_1 \times Q_2$$
 $$F_i = \{ \langle q_1, q_2 \rangle \mid q_1 \in F_1 \wedge q_2 \in F_2\}$$
 \begin{equation}
+\label{equation:newdelta}
 \begin{split}
   \Delta_i =
     \{ \langle \langle q_{1, f}, q_{2, f} \rangle, c \rangle
@@ -122,7 +124,8 @@ $$F_i = \{ \langle q_1, q_2 \rangle \mid q_1 \in F_1 \wedge q_2 \in F_2\}$$
 The most interesting part of this construction is the creation of the
 new delta function. Edges are only added to $\Delta_i$ when a particular
 character $c$ shows up in both input delta functions. The first set in
-the union covers this most intuitive case, but we still need to consider
+the union given in equation \ref{equation:newdelta} covers this most
+intuitive case, but we still need to consider
 the presence of $\epsilon$ edges. The last three sets add edges in the
 compound NFA when $\epsilon$ shows up in either of the input NFAs.
 Note the way that only the side of the compound state with an
@@ -136,7 +139,7 @@ full intersection NFA would have states $q_{0,1}, q_{1,2}$ and so on.
 It is easy to see by inspection of the diagram that the intersection of
 \verb'/aa/' and \verb'/ab/' is empty, as expected because
 \verb'/aa/' does not accept any strings containing \verb'b', while
-\verb'/b/' demands a \verb'b' in its input.
+\verb'/ab/' demands a \verb'b' in its input.
 
 To see an example where the intersection is non-empty, consider the
 intersection of \verb'/aa/' (figure \ref{fig:NFAaa}) and \verb'/a*/'
@@ -186,7 +189,7 @@ two regex is not empty, as we would expect.
 
 While regular expression intersection is most elegantly stated
 in terms of abstract NFAs and the construction of an entirely
-new automata, this approach needs to be modified if it is
+new automaton, this approach needs to be modified if it is
 to be used in the context of a VM NFA simulation. A regex
 VM program is a representation of an NFA, but not in the usual
 set-of-states and transition
@@ -327,7 +330,7 @@ algorithm.
 \section{Compiling without Optimization}
 \label{section:compilation}
 
-In this section, we define \verb'code', a compilation function mapping
+In this section, we define \verb'code', a compilation function which maps
 from regular expressions to VM instructions. The approach taken here
 draws heavy inspiration from Russ Cox's writeup of the virtual machine
 approach to regular expressions (\cite{CoxVirtualMachineApproach}).
@@ -344,7 +347,7 @@ In the context of VM instructions, sets are written in
 \texttt{SCREAMING\allowbreak\_SNAKE\allowbreak\_CASE}.
 When a new label is mentioned in table
 \ref{table:codedef} assume that it is fresh and unique as if it has
-come from a \verb'gensym' like routine.
+come from a \verb'gensym' routine.
 
 \begin{table}[ht]
 \label{table:codedef}
@@ -451,7 +454,9 @@ the remainder of the regex is compiled using the ordinary compilation
 path. In our actual implementation, optimizations are interleaved with
 the standard compiler code paths, but it is easier to think about
 them in a layered fasion. The applicability criterion for each
-optimization is discussed below, and the relative precedence of different
+optimization is discussed on a case by case basis in sections
+\ref{section:greedydotstarscan} to \ref{section:skipopt},
+and the relative precedence of different
 optimizations is outlined in section \ref{section:optprecedence}.
 
 This section just covers the most common cases; a discussion of
@@ -459,12 +464,13 @@ how these common cases are extended to deal with minor semantic
 variations can be found in section \ref{section:optextend}.
 
 \subsection{Greedy Dotstar Scan}
+\label{section:greedydotstarscan}
 
 The expression $.*l$ matches anything up to and including the first
 appearance of $l$. The standard code emitted for this pattern involves
 spawning two new threads, $t_1$ and $t_2$, for every character of input.
 Thread $t_1$ tries to start matching the literal terminator, while thread $t_2$
-accepts any and prepares to spawn another pair of threads.
+accepts any character and prepares to spawn another pair of threads.
 Thread $t_1$ will keep dying until the first occurrence of $l$,
 at which point it will try to match the rest of the regex.
 Thread $t_2$ will keep rolling forward, splitting off threads that try
@@ -492,8 +498,9 @@ optimization will not change the results of the regex execution
 (\cite{Hume1991}).
 
 It might seem like we would be justified in applying a similar 
-optimization to \verb'e*l', but this would allow matches to occur
-when they ought not to. \verb'scan-end' will scan forward over anything
+optimization to expressions of the form $e*l$, but this would allow
+matches to occur when they ought not to.
+\verb'scan-end' will scan forward over anything
 but $l$, but it would only be legitimate to scan forward over repetitions
 of $e$, something which can only be determined with full execution of
 the regular expression.
@@ -509,6 +516,7 @@ be safely compiled to:
 goto-end
 \end{verbatim}
 
+\noindent
 To determine if an expression is in a trailing position we can 
 invoke algorithm \ref{algo:marktrailing} on the top level expression
 to recursively mark expressions as trailing. This annotation pass
@@ -568,7 +576,7 @@ accelerated approach (\cite{GallantRegex}) and a group of literal
 terminators using Aho-Corasick (\cite{Aho1975}) or Teddy (\cite{Teddy}).
 For simplicity we just discuss scan optimization for expressions of
 the form $el$, but it can just as easily apply to expressions of the
-form $e(?:l1|l2|...|)$ or $e(l1|l2|...|)$.
+form $e(?:l_1|l_2|...|)$ or $e(l_1|l_2|...|)$.
 If $L(.*l.*) \cap L(e) = \emptyset$ and $e$ does
 not contain captures, then $l \not\in L(e)$\footnote{The details of deciding
 this problem are laid out in section \ref{section:regexinterdecide}.}.
@@ -623,15 +631,17 @@ interleaved with the logic for the $.*l$ optimization, so the
 real concatenation compiler routine is more complicated. For
 expository purposes we consider them separately.
 
-\subsection{Skip}
+\subsection{Literal Skip}
 \label{section:skipopt}
 
+\noindent
 The idea of the skip optimization is to compile a literal, $l$, to
 
 \begin{verbatim}
 skip len(l)
 \end{verbatim}
 
+\noindent
 The trouble is that just skipping over literals won't work at choice points.
 To illustrate the problem, consider the regex \verb'/ac(.).|bc.(.)/'
 on the input \verb'bcxy', which demonstrates a few different problems with
@@ -666,11 +676,12 @@ char FIRST_SET
 skip n-1
 \end{verbatim}
 
+\noindent
 Here \verb'FIRST_SET' is the set of characters which might
 begin the regular expression ($fset(e_{branch})$).
 Even this guard is not valid if the first sets of any two
 branches at the branch point intersect. For example it would
-not help deal with $a(.).|a.(.)$. In such cases we give up
+not help deal with \verb'a(.).|a.(.)'. In such cases we give up
 on the optimization entirely.
 
 \section{Optimization Variants and Extensions}
@@ -685,14 +696,10 @@ repetitions must take into account considerations around capture groups and
 precedence.
 
 % TODO: skip fusion
-%While skipping over raw literals, and making sure to avoid
-%falling prey to subtle ambiguities is important, we can do better.
-%Both \verb'xxx' and \verb'xxx|yyy' ought to compile down to
-%the same \verb'skip 3' instruction.
 
 \subsection{Scan Variants}
 
-\subsubsection{Lazy Dotstar Scan} %: {\tt code}($.*?l$)}
+\subsubsection{Lazy Dotstar Scan}
 
 $.*?l$ gets compiled to:
 
@@ -702,6 +709,7 @@ L1: scan-end l
 L2: 
 \end{verbatim}
 
+\noindent
 This optimization follows similar logic to that used for the greedy
 dotstar optimization. At first it might appear that we would be able
 to dispense with the non-determinism for the lazy variant, as laziness
@@ -733,7 +741,7 @@ L2:
 \subsubsection{Capture Terminated Lazy Dotstar Scan}
 
 If the repetition was lazy the operands to split are flipped.
-$.*?(l)$ get compiled to:
+$.*?(l)$ gets compiled to:
 
 \begin{verbatim}
 L1: scan-start l
@@ -761,13 +769,13 @@ be at least one leading character to scan over.
 
 Section \ref{section:skipopt} already introduced the idea that
 compiling skips at choice points requires a bit of extra thought.
-This section goes into a more detail about how exactly skips are
+This section goes into more detail about how exactly skips are
 handled in the context of an alternative.
-This optimization applies iff none of the first sets of $e1 \dots en$
+The optimization applies iff none of the first sets of $e1 \dots en$
 intersect. If they do intersect, we have to fall back on the standard
 compilation strategy. Note that we can't just define this operation as
 an optimization over a binary operator because we need a view of each
-of the branches.
+of the branches in order to check the first sets for intersection.
 
 \begin{verbatim}
 split L1 L2
@@ -790,7 +798,7 @@ Unless otherwise noted where \verb'code' recursively calls
 itself, \verb'branch_code' recursively calls \emph{itself}
 (the one exception is that tail of a concatenation is
 compiled with the standard \verb'code' function).
-The \verb'branc_code' function boils down to compiling literals
+The \verb'branch_code' function boils down to compiling literals
 as a \verb'char' followed by a \verb'skip' rather than just
 a \verb'skip', and making sure to do so recursively through
 the structure of the expression.
@@ -835,8 +843,8 @@ code(e2)
  
 \subsubsection{Greedy Skip Star}
 
-If the first sets of $e1$ and $e2$ don't intersect, $e1*e2$
-is compiled as:
+If the first sets of $e_1$ and $e_2$ don't intersect, $e_1*e_2$
+is compiled as
 
 \begin{verbatim}
 split L1 L2
@@ -845,16 +853,19 @@ L1: branch_code(e1)
 L2: branch_code(e2)
 \end{verbatim}
 
-Where \verb'branch_code' is defined by table \ref{table:branchcode}.
+\noindent
+where \verb'branch_code' is defined by table \ref{table:branchcode}.
 The lazy variant just flips the split operands. If the first
-sets to intersect, unoptimized code must be generated. The story
+sets do intersect, unoptimized code must be generated. The story
 is really a little more complex because we have to consider
-expressions of the form $e1*e2*...en$. In such cases, we much
-check to see if any of the first sets of $e1$, $e2$, and $en$.
+expressions of the form $e_1*e_2*...e_n$. In such cases, we must
+check to see if any of the first sets of $e_1$, $e_2$, and $e_n$
+intersect.
 
 \subsubsection{Greedy Skip Plus}
 
-If the first sets of $e1$ and $e2$ don't intersect.
+If the first sets of $e_1$ and $e_2$ don't intersect we can emit
+the code
 
 \begin{verbatim}
 L1: branch_code(e1)
@@ -862,7 +873,8 @@ L1: branch_code(e1)
 L2: branch_code(e2)
 \end{verbatim}
 
-Where \verb'branch_code' is defined by table \ref{table:branchcode}.
+\noindent
+where \verb'branch_code' is defined by table \ref{table:branchcode}.
 The lazy variant just flips the split operands. Multiple
 repeated expressions are handled just as they are for
 Kleene star.
@@ -870,26 +882,26 @@ Kleene star.
 \section{Optimization Precedence}
 \label{section:optprecedence}
 
-When an optimization can be applied, it is, but when multiple
+When just one optimization can be applied, it is, but when multiple
 mutually exclusive optimizations can be applied, one must be
 selected. While we have not defined a rigorous cost model
-to do optimization selection, we do have some heuristics.
-Our goal is to skip or scan over as much input as possible.
+to do optimization selection, we do have some heuristics
+with the goal of skipping or scanning over as much input as possible.
 While skipping has the most potential for speedup, we
 believe that scans are more likely to quickly consume large
 chunks of input. Most literals are relatively small, while
-it is quite a bit more common to see \verb'.*' used to eat
+it is quite a bit more common to see $.*$ used to eat
 up large chunks of input. The $el$ optimization has the
 potential to scan over the most preceding subexpressions\footnote{
 Keep in mind that $e$ might be a concatenation.},
-so we give it the highest precedence. The trailing \verb'.*' optimization
+so we give it the highest precedence. The trailing $.*$ optimization
 can never conflict with another optimization, so we don't have to
-assign it a precedence. All that remains is the order of the \verb'.*l'
+assign it a precedence. All that remains is the order of the $.*l$
 optimization and the literal skip optimization. If we gave the
-literal skip optimization a higher precedence, the \verb'.*l'
-optimization would never trigger. Additionally, the \verb'.*l'
-optimization includes skipping over the literal terminator.
-Then there is no reason to place the literal skip optimization
+literal skip optimization a higher precedence, the $.*l$
+optimization would never trigger. Additionally, the $.*l$
+optimization includes skipping over the literal terminator,
+so there is no reason to place the literal skip optimization
 at a higher precedence. Table \ref{table:optprec} defines these
 precedence levels concisely.
 
