@@ -1,7 +1,13 @@
 
 RESOURCE_DIR := ${HOME}/repos/thesis-defense-talk/resources
 
-all: aa-nfa.png ab-nfa.png aa-intersect-ab.png astar-nfa.png aa-intersect-astar.png
+all: aa-nfa.png ab-nfa.png aa-intersect-ab.png astar-nfa.png\
+	 aa-intersect-astar.png \
+	 aa-intersect-ab-step1.png \
+	 aa-intersect-ab-step3.png \
+	 aa-intersect-ab-step4.png \
+	 aa-intersect-ab-step5.png \
+	 aa-intersect-ab-step6.png
 
 install:
 	cp *.png ${RESOURCE_DIR}

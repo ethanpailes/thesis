@@ -1,0 +1,18 @@
+\begin{tikzpicture}[->,>=stealth',shorten >=1pt,node distance = 2cm,semithick]
+  \tikzstyle{every state}=[text=black]
+
+  \node[initial,state]   (Q00)                 {$q_{0,0}$}; 
+  \node[state]           (Q01) [above of=Q00]  {$q_{0,1}$}; 
+  \node[state]           (Q02) [below of=Q00]  {$q_{0,2}$}; 
+
+  \node[state]           (Q10) [right of=Q00]  {$q_{1,0}$}; 
+  \node[state]           (Q11) [above of=Q10]  {$q_{1,1}$}; 
+  \node[state]           (Q12) [below of=Q10]  {$q_{1,2}$}; 
+
+  \node[state]           (Q20) [right of=Q10]  {$q_{2,0}$}; 
+  \node[state]           (Q21) [above of=Q20]  {$q_{2,1}$}; 
+  \node[state,accepting] (Q22) [below of=Q20]  {$q_{2,2}$}; 
+
+  %\path (Q00) edge node [above] {$a$} (Q11)
+  %      ;
+\end{tikzpicture}
