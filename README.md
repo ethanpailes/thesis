@@ -1,0 +1,26 @@
+# Abstract
+
+Each regular expresion corrisponds to a set of strings, or
+language. Regular expression engines can be used to quickly decide
+if a particular string is in that language and to
+perform submatch extraction (parsing) on a regex containing
+capture groups. While there has been significant work that focuses on either
+deciding regular expressions or parsing them, to
+the best of our knowledge no one has considered the
+two problems separately. This thesis presents skip
+regex, an engine for performing regular expression
+parsing without considering the decision problem.
+We show that this facilitates optimizations such as skipping
+over sections of input or quickly scanning towards particular
+literal strings, and argue through examples that the capability to parse
+without deciding is a useful and applicable one, particularly
+in the case of regular expressions where the performance
+difference between DFAs and NFA simulations means that regex are
+often currently decided twice in practice. While DFAs can decide
+regular expressions quickly, they struggle to provide features
+such as submatch extraction. Because of the difference in speed
+of the two approaches, existing engines often first decide the input
+with a DFA and then use an NFA to parse the matching subset of input.
+Skip regex provide the ability to parse without deciding,
+and provide a performance improvement even when the input must
+be decided. 
