@@ -193,10 +193,11 @@ split L1 L2
 L1: save 2
     char {x|y}
     save 3
+    jump M
 L2: save 4
     char {y|z}
     save 5
-match
+M: match
         \end{verbatim}
     executed on input \verb'y' would result in the first capture group
     (specified by slots 2 and 3) being populated with a \verb'y'
